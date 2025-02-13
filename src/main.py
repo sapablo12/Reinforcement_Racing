@@ -89,7 +89,7 @@ def run_simulation(agent,check_rate=2):
                 if agent.speed < 0.1:
                     agent.active = False
                 # Modified displacements check to compute Euclidean distance
-                if len(agent.displacements) > 1 and np.linalg.norm(np.array(agent.displacements[-1]) - np.array(agent.displacements[-2])) < 0.5:
+                if len(agent.displacements) > 1 and np.linalg.norm(np.array(agent.displacements[-1]) - np.array(agent.displacements[-3])) < 0.5:
                     agent.active = False
                     
 
