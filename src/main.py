@@ -65,7 +65,7 @@ def run_simulation(agent,check_rate=2):
 
         if game_active:
             # Update and draw the agent
-            agent.update()
+            agent.update2()
             agent.draw(screen)
 
             # Check for interaction with green spots
@@ -79,7 +79,7 @@ def run_simulation(agent,check_rate=2):
 
             # Check displacement every 5 seconds
             if elapsed_seconds - last_displacement_check >= check_rate:
-                agent.reward += agent.displacement()
+                
                 last_displacement_check = elapsed_seconds
 
             if elapsed_seconds >= 4: 
@@ -88,7 +88,8 @@ def run_simulation(agent,check_rate=2):
                     
                 if agent.speed < 0.1:
                     agent.active = False
-                if np.abs(agent.last_displacement - agent.displacement()) < 0.5:
+                # Modified displacements check to compute Euclidean distance
+                if len(agent.displacements) > 1 and np.linalg.norm(np.array(agent.displacements[-1]) - np.array(agent.displacements[-2])) < 0.5:
                     agent.active = False
                     
 

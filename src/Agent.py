@@ -9,6 +9,15 @@ from base_model import *  # Import the functions from base_model.py
 
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 
+# Add new class Info for storing update data
+class Info:
+    def __init__(self, sensors, output, step_reward, next_sensors, done_flag):
+        self.sensors = sensors
+        self.output = output
+        self.step_reward = step_reward
+        self.next_sensors = next_sensors
+        self.done_flag = done_flag
+
 class Agent:
     def __init__(self, track, model: Model,weights):  # Add type hint for model
         self.track = track
@@ -30,7 +39,7 @@ class Agent:
         self.reward=0
         self.font = pygame.font.Font(None, 24)  # Font for displaying sensor values
         self.data = []  # Initialize self.data as an empty list
-        #print(self.model.summary())
+        # Initialize manual controls for continuous user input
     def draw(self, screen):
         # Draw the agent as a square
         half_size = self.size / 2
@@ -150,8 +159,8 @@ class Agent:
         if self.active:
             if self.model is not None:
                 output = self.model(self.sensors.numpy())
-                self.update_angle(output[0,0])
-                self.update_speed(output[0, 1])
+                self.update_angle(np.random.normal(output[0,0],0.1))
+                self.update_speed(np.random.normal(output[0,1],0.1))
                 # Update the position of the agent based on speed and angle
                 self.x += self.speed * np.cos(np.radians(self.angle))
                 self.y += self.speed * np.sin(np.radians(self.angle))
@@ -182,8 +191,8 @@ class Agent:
                 # Determine if the agent is done
                 done_flag = 1.0 if self.finish else 0.0
 
-                # Append new data (sensor data, output, reward, next sensor data, done flag) to self.data
-                new_data = (self.sensors.numpy().tolist(), output.numpy().tolist(), step_reward, next_sensors, done_flag)
+                # Replace tuple with Info instance
+                new_data = Info(self.sensors.numpy().tolist(), output.numpy().tolist(), step_reward, next_sensors, done_flag)
                 self.data.append(new_data)
                 
                 self.x = np.clip(self.x, 0, SCREEN_WIDTH)
@@ -193,17 +202,84 @@ class Agent:
             self.displacements.append(new_displacement)
             step_reward = self.calculate_step_reward()
             print(step_reward)
-            # Update sensors for the next time step
             
-            next_sensors = self.update_sensors().numpy().tolist()
 
             # Determine if the agent is done
             done_flag = 1.0 if self.finish else 0.0
+            if not self.finish:
+                step_reward = -100
+                done_flag = 0.0
+            else:
+                done_flag = 1.0
 
-            # Append new data (sensor data, output, reward, next sensor data, done flag) to self.data
-            new_data = (self.sensors.numpy().tolist(), output.numpy().tolist(), step_reward, next_sensors, done_flag)
+            # Define output for consistency in the inactive branch
+            output = tf.zeros([1, 2])
+            # Replace tuple with Info instance
+            new_data = Info(tf.zeros([1, 5]).numpy().tolist(), output.numpy().tolist(), step_reward, tf.zeros([1, 5]).numpy().tolist(), done_flag)
             self.data.append(new_data)
 
+    def update2(self):
+        if self.active:
+            keys = pygame.key.get_pressed()
+            # Compute continuous delta values
+            # Adjust angle directly with left/right arrows
+            if keys[pygame.K_LEFT]:
+                self.angle -= 1
+            if keys[pygame.K_RIGHT]:
+                self.angle += 1
+            # Adjust speed continuously with up/down arrows
+            
+            if keys[pygame.K_UP]:
+                self.speed += 0.01
+            if keys[pygame.K_DOWN]:
+                self.speed -= 0.01
+
+            # Accumulate and clamp the continuous values between 0.0 and 1.0
+
+            # Create user output using the continuous values
+            output = tf.convert_to_tensor([[0,0]], dtype=tf.float32)
+            
+            # ...existing code for updating position...
+            self.x += self.speed * np.cos(np.radians(self.angle))
+            self.y += self.speed * np.sin(np.radians(self.angle))
+            self.total_distance += self.speed
+            self.total_time += 1
+
+            new_displacement = (self.x, self.y)
+            self.displacements.append(new_displacement)
+
+            if self.x <= 0 or self.x >= SCREEN_WIDTH or self.y <= 0 or self.y >= SCREEN_HEIGHT:
+                self.active = False
+            else:
+                color = self.track.get_at((int(self.x), int(self.y)))
+                if color == (0, 0, 0) or color == (0, 255, 0):
+                    self.active = False
+                elif color == (255, 0, 0):
+                    self.finish = True
+
+            step_reward = self.calculate_step_reward()
+            print(step_reward)
+            next_sensors = self.update_sensors().numpy().tolist()
+            done_flag = 1.0 if self.finish else 0.0
+            new_data = Info(self.sensors.numpy().tolist(), output.numpy().tolist(), step_reward, next_sensors, done_flag)
+            self.data.append(new_data)
+
+            self.x = np.clip(self.x, 0, SCREEN_WIDTH)
+            self.y = np.clip(self.y, 0, SCREEN_HEIGHT)
+        else:
+            new_displacement = (self.x, self.y)
+            self.displacements.append(new_displacement)
+            step_reward = self.calculate_step_reward()
+            print(step_reward)
+            done_flag = 1.0 if self.finish else 0.0
+            if not self.finish:
+                step_reward = -100
+                done_flag = 0.0
+            else:
+                done_flag = 1.0
+            output = tf.zeros([1, 2])
+            new_data = Info(tf.zeros([1, 5]).numpy().tolist(), output.numpy().tolist(), step_reward, tf.zeros([1, 5]).numpy().tolist(), done_flag)
+            self.data.append(new_data)
 
     def calculate_mean_speed(self):
         if self.total_time > 0:
