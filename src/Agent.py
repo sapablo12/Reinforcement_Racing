@@ -251,15 +251,15 @@ class Agent:
                 # Compute continuous delta values
                 # Adjust angle directly with left/right arrows
                 if keys[pygame.K_LEFT]:
-                    self.angle -= 1
+                    self.angle -= 3
                 if keys[pygame.K_RIGHT]:
-                    self.angle += 1
+                    self.angle += 3
                 # Adjust speed continuously with up/down arrows
                 
                 if keys[pygame.K_UP]:
-                    self.speed += 0.01
+                    self.speed += 0.05
                 if keys[pygame.K_DOWN]:
-                    self.speed -= 0.01
+                    self.speed -= 0.1
 
                 # Accumulate and clamp the continuous values between 0.0 and 1.0
 

@@ -83,7 +83,7 @@ def run_simulation(agent,check_rate=2):
                 last_displacement_check = elapsed_seconds
 
             if elapsed_seconds >= 4: 
-                if elapsed_seconds>=20:
+                if elapsed_seconds>=30:
                     agent.active = False
                     
                 if agent.speed < 0.1:
