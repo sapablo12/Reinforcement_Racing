@@ -82,7 +82,7 @@ def run_simulation(agent,check_rate=2):
                 
                 last_displacement_check = elapsed_seconds
 
-            if elapsed_seconds >= 4: 
+            """if elapsed_seconds >= 4: 
                 if elapsed_seconds>=30:
                     agent.active = False
                     
@@ -90,7 +90,7 @@ def run_simulation(agent,check_rate=2):
                     agent.active = False
                 # Modified displacements check to compute Euclidean distance
                 if len(agent.displacements) > 1 and np.linalg.norm(np.array(agent.displacements[-1]) - np.array(agent.displacements[-3])) < 0.5:
-                    agent.active = False
+                    agent.active = False"""
                     
 
             agent.check_wall()
@@ -98,11 +98,11 @@ def run_simulation(agent,check_rate=2):
             if  agent.finish:
                 game_active = False
                 
-                return agent.data
+                
             if not agent.active:
                 game_active = False
                 
-                return agent.data
+            return agent.data
             
 
         # Check if the agent is finished or inactive
@@ -123,62 +123,29 @@ def tweak_random(flat_weights, sigma, ratio):
     return flat_weights
 
 
-def train_batch(size,model,sigma,ratio,check_rate,exploration=10):
-    databatch = []
-    models = []
-    databatch.append(run_simulation(Agent(track, model=model,weights=flatten_weights(model.trainable_variables)),check_rate=check_rate))
-    flat_weights = flatten_weights(model.trainable_variables)
+def train_batch(size,model,check_rate):
+    experiences = []
+    flat_weights=flatten_weights(model.trainable_variables)
+    current_agent = Agent(track, model=model,weights=flat_weights)
     for i in range(size): 
-        current_agent = Agent(track, model=model,weights=flat_weights)
-        #print(compare_models(model,current_agent.model))
-        databatch.append(run_simulation(current_agent,check_rate))   
-    #Some aggressive tweaking
-    for j in range(exploration):    
-        new_weights=tweak_random(flat_weights=flat_weights, sigma=sigma, ratio=50)
-        current_agent = Agent(track, model=model,weights=new_weights)
-        databatch.append(run_simulation(current_agent,check_rate))
-    
-    return flat_weights
+        run_simulation(current_agent,check_rate)  
+    return experiences
         
-    
-
 def train(model):
     wmodel=model
-    
     for i in tqdm(range(1), desc="Fase 1"):
-        win_weights=train_batch(size=10,model=wmodel,sigma=0.05,ratio=30,check_rate=1)
-        assign_weights(wmodel, win_weights)
-        # Add your logic for the first loop here
-
-    for j in tqdm(range(1), desc="Fase 2"):
-        win_weights=train_batch(size=10,model=wmodel,sigma=0.05,ratio=10,check_rate=1.5)
-        assign_weights(wmodel, win_weights)
-        # Add your logic for the second loop here
-
-    for k in tqdm(range(1), desc="Fase 3"):
-        win_weights=train_batch(size=10,model=wmodel,sigma=0.01,ratio=5,check_rate=2)
-        assign_weights(wmodel, win_weights)
-    
+        experiences=train_batch(size=10,model=wmodel,sigma=0.05,ratio=30,check_rate=1)
+  
     return wmodel
 def try_model(model):
     agent = Agent(track, model,flatten_weights(model.trainable_variables))
     run_simulation(agent)
 
 def main():
-    model = load_model("model.h5")
-    wmodel=train(model) 
-    #wmodel.save("defmodel.h5")
+    model = load_model("src/model.keras")  # Updated to native Keras format
+    wmodel = train(model)
+    wmodel.save("src/defmodel.keras")  # Save using the native Keras format
     try_model(model)
 
 if __name__ == "__main__":
     main()
-
-# wmodel=load_model("model.h5")
-# weights=flatten_weights(wmodel.trainable_variables)
-# cmodel=clone_model(wmodel)
-# assign_weights(cmodel,weights)
-# print("antes: " +str(compare_models(wmodel,cmodel)))
-# fweights=flatten_weights(cmodel.trainable_variables)
-# fweights=tweak_random(flat_weights=fweights, sigma=0.1, ratio=20)
-# assign_weights(cmodel,fweights)
-# print("despues: " +str(compare_models(wmodel,cmodel)))

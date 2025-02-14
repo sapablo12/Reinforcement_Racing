@@ -32,7 +32,8 @@ class Agent:
         self.sensors = tf.Variable(tf.zeros([1, 5]), dtype=tf.float32)  # Distance values for the 5 sensors as a tensor
         self.finish = False
         self.active = True  # Flag to check if agent is active
-        self.model: Model = clone_model(model) 
+        self.model: Model = clone_model(model)
+        self.epsilon=0.1 
         assign_weights(model=self.model,flat_weights=weights)  # Explicitly declare the type of self.model
         self.total_distance = 0  # Total distance traveled by the agent
         self.total_time = 0  # Total time the agent has been active
@@ -163,8 +164,16 @@ class Agent:
         if self.active:
             if self.model is not None:
                 output = self.model(self.sensors.numpy())
-                self.update_angle(np.random.normal(output[0,0],0.1))
-                self.update_speed(np.random.normal(output[0,1],0.1))
+                act = tf.argmax(output, axis=1).numpy()[0]
+                actions = {
+                        0: self.case_0,
+                        1: self.case_1,
+                        2: self.case_2,
+                        3: self.case_3,
+                    }
+                if np.random.rand() < self.epsilon:  # Exploration
+                    act=np.random.choice(4)
+                actions.get(act, lambda: None)()
                 # Update the position of the agent based on speed and angle
                 self.x += self.speed * np.cos(np.radians(self.angle))
                 self.y += self.speed * np.sin(np.radians(self.angle))
@@ -250,16 +259,16 @@ class Agent:
                 keys = pygame.key.get_pressed()
                 # Compute continuous delta values
                 # Adjust angle directly with left/right arrows
-                if keys[pygame.K_LEFT]:
-                    self.angle -= 3
-                if keys[pygame.K_RIGHT]:
-                    self.angle += 3
+                if keys[pygame.K_a]:
+                    self.angle -= 2.5
+                if keys[pygame.K_d]:
+                    self.angle += 2.5
                 # Adjust speed continuously with up/down arrows
                 
-                if keys[pygame.K_UP]:
-                    self.speed += 0.05
-                if keys[pygame.K_DOWN]:
-                    self.speed -= 0.1
+                if keys[pygame.K_w]:
+                    self.speed += 0.1
+                if keys[pygame.K_s]:
+                    self.speed -= 0.05
 
                 # Accumulate and clamp the continuous values between 0.0 and 1.0
 
@@ -307,3 +316,19 @@ class Agent:
                 output = tf.zeros([1, 2])
                 new_data = Info(tf.zeros([1, 5]).numpy().tolist(), output.numpy().tolist(), step_reward, tf.zeros([1, 5]).numpy().tolist(), done_flag)
                 self.data.append(new_data)
+
+    def case_0(self):
+        # Turn left: decrease angle by 5 degrees
+        self.angle -= 2.5
+
+    def case_1(self):
+        # Turn right: increase angle by 5 degrees
+        self.angle += 2.5
+
+    def case_2(self):
+        # Increase speed by 0.5
+        self.speed += 0.1
+
+    def case_3(self):
+        # Decrease speed by 0.5, ensuring it doesn't drop below zero
+        self.speed = max(0, self.speed - 0.01)

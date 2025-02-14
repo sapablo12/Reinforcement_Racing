@@ -10,7 +10,7 @@ model = Sequential()
     
 model.add(Dense(64, input_dim=5, activation='relu', kernel_initializer=initializer))
 model.add(Dense(64, activation='relu', kernel_initializer=initializer))
-model.add(Dense(2, activation='relu', kernel_initializer=initializer))
+model.add(Dense(4, activation='relu', kernel_initializer=initializer))
 
 model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
 
@@ -48,4 +48,4 @@ def compare_models(model1, model2):
     
     return j
 
-model.save("model.h5")
+model.save("src/model.keras")
