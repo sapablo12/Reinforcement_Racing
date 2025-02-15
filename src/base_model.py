@@ -8,9 +8,9 @@ initializer = tf.keras.initializers.RandomNormal(mean=0., stddev=1.)
 
 model = Sequential()
     
-model.add(Dense(64, input_dim=5, activation='relu', kernel_initializer=initializer))
+model.add(Dense(64, input_dim=6, activation='relu', kernel_initializer=initializer))
 model.add(Dense(64, activation='relu', kernel_initializer=initializer))
-model.add(Dense(4, activation='relu', kernel_initializer=initializer))
+model.add(Dense(4, activation=None, kernel_initializer=initializer))
 
 model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
 
@@ -48,4 +48,6 @@ def compare_models(model1, model2):
     
     return j
 
-model.save("src/model.keras")
+model.save("src/target_model.keras")
+
+model.save("src/Q_model.keras")

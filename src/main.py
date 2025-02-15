@@ -11,7 +11,8 @@ from base_model import *
 #// vscode-fold=#
 # Initialize Pygame
 pygame.init()
-
+LEARNING_RATE = 0.01
+DISCOUNT_FACTOR = 0.95
 # Define screen dimensions
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
@@ -57,7 +58,7 @@ def run_simulation(agent, check_rate=2):
                 running = False
 
         if game_active:
-            agent.update2()
+            agent.update()
             agent.draw(screen)
             elapsed_seconds = (pygame.time.get_ticks() - start_ticks) / 1000
             timer_text = timer_font.render(f"Time: {elapsed_seconds:.2f} s", True, (0, 0, 0))
@@ -99,29 +100,50 @@ def tweak_random(flat_weights, sigma, ratio):
     return flat_weights
 
 
-def train_batch(size,model,check_rate):
+def train_batch(size,model,check_rate,exploration):
     experiences = []
     flat_weights=flatten_weights(model.trainable_variables)
-    current_agent = Agent(track, model=model,weights=flat_weights)
+    current_agent = Agent(track, model=model,weights=flat_weights,exploration=exploration)
     for i in range(size): 
         run_simulation(current_agent,check_rate)  
     return experiences
         
-def train(model):
-    wmodel=model
-    for i in tqdm(range(100), desc="Fase 1"):
-        experiences=train_batch(size=10,model=wmodel,check_rate=10)
-  
-    return wmodel
+def train(Q_model):
+    target_model = clone_model(Q_model)
+    target_model.set_weights(Q_model.get_weights())
+    for i in tqdm(range(30), desc="Fase 1"):
+        experiences = train_batch(size=20, model=Q_model, check_rate=10,exploration=0.4)
+        np.random.shuffle(experiences)
+        for data in experiences:
+            target_value=target_model.predict(data.state)
+            new_target_max=data.reward+DISCOUNT_FACTOR*np.max(target_model.predict(data.next_state))
+            target_value[0][data.action]=new_target_max
+            Q_model.fit(data.state,target_value, verbose=0)
+        target_model = clone_model(Q_model)
+        target_model.set_weights(Q_model.get_weights())    
+    for i in tqdm(range(30), desc="Fase 2"):
+        experiences = train_batch(size=20, model=Q_model, check_rate=10,exploration=0.2)
+        np.random.shuffle(experiences)
+        for data in experiences:
+            target_value=target_model.predict(data.state)
+            new_target_max=data.reward+DISCOUNT_FACTOR*np.max(target_model.predict(data.next_state))
+            target_value[0][data.action]=new_target_max
+            Q_model.fit(data.state,target_value, verbose=0)
+        target_model = clone_model(Q_model)
+        target_model.set_weights(Q_model.get_weights())    
+    
+    return Q_model
+
 def try_model(model):
     agent = Agent(track, model,flatten_weights(model.trainable_variables))
     run_simulation(agent)
 
 def main():
-    model = load_model("src/model.keras")  # Updated to native Keras format
-    wmodel = train(model)
+    
+    Q_model = load_model("src/Q_model.keras")  # Updated to native Keras format
+    wmodel = train(Q_model)
     wmodel.save("src/defmodel.keras")  # Save using the native Keras format
-    try_model(model)
+    #try_model(model)
 
 if __name__ == "__main__":
     main()

@@ -11,18 +11,19 @@ SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 
 # Add new class Info for storing update data
 class Info:
-    def __init__(self, sensors, output, step_reward, next_sensors, done_flag):
-        self.sensors = sensors
+    def __init__(self, state, output, act,step_reward, next_state, done_flag):
+        self.state = state
         self.output = output
+        self.action=act
         self.step_reward = step_reward
-        self.next_sensors = next_sensors
         self.done_flag = done_flag
+        self.next_state=next_state
 
 class Agent:
-    def __init__(self, track, model: Model,weights):  # Add type hint for model
+    def __init__(self, track, model: Model,weights,exploration):  # Add type hint for model
         self.track = track
         self.x_initial = 0
-        self.y_initial = 450
+        self.y_initial = 420
         self.x=self.x_initial
         self.y=self.y_initial
         self.displacements = []  # Initialize self.displacements as an empty list
@@ -33,7 +34,7 @@ class Agent:
         self.finish = False
         self.active = True  # Flag to check if agent is active
         self.model: Model = clone_model(model)
-        self.epsilon=0.1 
+        self.epsilon=exploration
         assign_weights(model=self.model,flat_weights=weights)  # Explicitly declare the type of self.model
         self.total_distance = 0  # Total distance traveled by the agent
         self.total_time = 0  # Total time the agent has been active
@@ -89,19 +90,7 @@ class Agent:
             distances += np.linalg.norm(np.array(last_displacements[i]) - np.array([self.x, self.y]))
         """
         return distances
-    
-    def update_angle(self, alpha):
-        # Turns the agent right, intensity is controlled by alpha (0-1)
-        # Max turn is 10 degrees, scaled by alpha
-        if np.abs(self.angle) > 360:
-            self.angle = np.remainder(self.angle, 360)
-        self.angle = self.angle+ 90*(alpha-0.5)
 
-    def update_speed(self, alpha):
-        # Increases the agent's speed, intensity is controlled by alpha (0-1)
-        # Max speed increment is 2, scaled by alpha
-        self.speed =5* alpha
-        # Ensure speed does not exceed a reasonable limit
         
     def draw_sensors(self, screen):
         sensor_length = 100
@@ -163,13 +152,14 @@ class Agent:
     def update(self):
         if self.active:
             if self.model is not None:
-                output = self.model(self.sensors.numpy())
+                state = tf.concat([self.sensors, [[self.speed / 10.0]]], axis=1)  # Normalize speed to 0-1
+                output = self.model(state)
                 act = tf.argmax(output, axis=1).numpy()[0]
                 actions = {
-                        0: self.case_0,
-                        1: self.case_1,
-                        2: self.case_2,
-                        3: self.case_3,
+                        0: self.dec_angle,
+                        1: self.inc_angle,
+                        2: self.inc_speed,
+                        3: self.dec_speed,
                     }
                 if np.random.rand() < self.epsilon:  # Exploration
                     act=np.random.choice(4)
@@ -203,9 +193,9 @@ class Agent:
 
                 # Determine if the agent is done
                 done_flag = 1.0 if self.finish else 0.0
-
+                next_state=tf.concat([next_sensors, [[self.speed / 10.0]]], axis=1)
                 # Replace tuple with Info instance
-                new_data = Info(self.sensors.numpy().tolist(), output.numpy().tolist(), step_reward, next_sensors, done_flag)
+                new_data = Info(state, output.numpy().tolist(),act, step_reward, next_state, done_flag)
                 self.data.append(new_data)
                 
                 self.x = np.clip(self.x, 0, SCREEN_WIDTH)
@@ -224,11 +214,11 @@ class Agent:
                 done_flag = 0.0
             else:
                 done_flag = 1.0
-
+                print("Ha muerto" + done_flag)
             # Define output for consistency in the inactive branch
             output = tf.zeros([1, 2])
             # Replace tuple with Info instance
-            new_data = Info(tf.zeros([1, 5]).numpy().tolist(), output.numpy().tolist(), step_reward, tf.zeros([1, 5]).numpy().tolist(), done_flag)
+            new_data = Info(tf.zeros([1, 5]).numpy().tolist(), output.numpy().tolist(), np.random.rand(0, 4), step_reward, tf.zeros([1, 5]).numpy().tolist(), done_flag)
             self.data.append(new_data)
 
     def calculate_step_reward(self):
@@ -238,7 +228,10 @@ class Agent:
             else:
                     return self.speed + 0.1*self.dispersion(150)
        else:
-            return -1000
+            if self.finish:
+                return self.speed+1000
+            else:
+                return -1000
 
 
     def calculate_mean_speed(self):
@@ -260,15 +253,15 @@ class Agent:
                 # Compute continuous delta values
                 # Adjust angle directly with left/right arrows
                 if keys[pygame.K_a]:
-                    self.angle -= 2.5
+                    self.dec_angle()
                 if keys[pygame.K_d]:
-                    self.angle += 2.5
+                    self.inc_angle()
                 # Adjust speed continuously with up/down arrows
                 
                 if keys[pygame.K_w]:
-                    self.speed += 0.1
+                    self.inc_speed()
                 if keys[pygame.K_s]:
-                    self.speed -= 0.05
+                    self.dec_speed()
 
                 # Accumulate and clamp the continuous values between 0.0 and 1.0
 
@@ -294,7 +287,7 @@ class Agent:
                         self.finish = True
 
                 step_reward = self.calculate_step_reward()
-                print(step_reward)
+                #zprint(step_reward)
                 next_sensors = self.update_sensors().numpy().tolist()
                 done_flag = 1.0 if self.finish else 0.0
                 new_data = Info(self.sensors.numpy().tolist(), output.numpy().tolist(), step_reward, next_sensors, done_flag)
@@ -306,7 +299,7 @@ class Agent:
                 new_displacement = (self.x, self.y)
                 self.displacements.append(new_displacement)
                 step_reward = self.calculate_step_reward()
-                print(step_reward)
+                #print(step_reward)
                 done_flag = 1.0 if self.finish else 0.0
                 if not self.finish:
                     step_reward = -100
@@ -317,18 +310,17 @@ class Agent:
                 new_data = Info(tf.zeros([1, 5]).numpy().tolist(), output.numpy().tolist(), step_reward, tf.zeros([1, 5]).numpy().tolist(), done_flag)
                 self.data.append(new_data)
 
-    def case_0(self):
-        # Turn left: decrease angle by 5 degrees
+    def dec_angle(self):
         self.angle -= 2.5
 
-    def case_1(self):
+    def inc_angle(self):
         # Turn right: increase angle by 5 degrees
         self.angle += 2.5
 
-    def case_2(self):
+    def inc_speed(self):
         # Increase speed by 0.5
-        self.speed += 0.1
+        self.speed = min(10, self.speed+0.1)  # Ensure speed doesn't exceed 7.5
 
-    def case_3(self):
+    def dec_speed(self):
         # Decrease speed by 0.5, ensuring it doesn't drop below zero
-        self.speed = max(0, self.speed - 0.01)
+        self.speed = max(0, self.speed - 0.2)
