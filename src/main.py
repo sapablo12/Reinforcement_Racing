@@ -41,14 +41,13 @@ def agent_touch_green_spot(agent_x, agent_y, green_spots, canvas, draw_image):
             return 100  # Reward for touching a green spot
     return 0
 
-def run_simulation(agent, check_rate=2):
+def run_simulation(agent):
     running = True
     clock = pygame.time.Clock()
     start_ticks = pygame.time.get_ticks()
     timer_font = pygame.font.Font(None, 36)
     game_active = True
     elapsed_seconds = 0
-    last_displacement_check = 0
 
     while running:
         screen.fill((255, 255, 255))
@@ -64,23 +63,13 @@ def run_simulation(agent, check_rate=2):
             elapsed_seconds = (pygame.time.get_ticks() - start_ticks) / 1000
             timer_text = timer_font.render(f"Time: {elapsed_seconds:.2f} s", True, (0, 0, 0))
             screen.blit(timer_text, (20, 20))
-            # Draw the cumulative reward on screen
             reward_text = timer_font.render(f"Reward: {agent.calculate_step_reward():.2f}", True, (0, 0, 0))
             screen.blit(reward_text, (SCREEN_WIDTH - reward_text.get_width() - 20, SCREEN_HEIGHT - reward_text.get_height() - 20))
-            # Check displacement every 5 seconds
-            if elapsed_seconds - last_displacement_check >= check_rate:
-                
-                last_displacement_check = elapsed_seconds
-
-            if elapsed_seconds >= 4: 
-                if elapsed_seconds>=30:
+            if elapsed_seconds >= 15: 
+                if elapsed_seconds >= 30:
                     agent.active = False
-                    
                 if agent.speed < 0.01:
                     agent.active = False
-                # Modified displacements check to compute Euclidean distance
-                    
-
             agent.check_wall()
             if agent.finish or not agent.active:
                 game_active = False
@@ -89,7 +78,7 @@ def run_simulation(agent, check_rate=2):
 
         pygame.display.flip()
         clock.tick(60)
-    return agent.data  # Moved return outside of the loop
+    return agent.data
 
 def tweak_random(flat_weights, sigma, ratio):
     index = []
@@ -101,45 +90,40 @@ def tweak_random(flat_weights, sigma, ratio):
     return flat_weights
 
 
-def train_batch(size,model,check_rate,exploration):  
+def get_experience(size, model, exploration):  
     experiences_batch = []
     flat_weights=flatten_weights(model.trainable_variables)
     for i in range(size): 
         current_agent = Agent(track, model=model,weights=flat_weights,exploration=exploration)
-        for experiences in run_simulation(current_agent,check_rate):
+        for experiences in run_simulation(current_agent):
             experiences_batch.append(experiences)
     return experiences_batch
-        
-def train(Q_model):
-    target_model = clone_model(Q_model)
-    target_model.set_weights(Q_model.get_weights())
+
+def episode(Q_model,target_model,exploration):   
     for i in tqdm(range(100), desc="Fase 1"):
-        experiences = train_batch(size=20, model=Q_model, check_rate=10, exploration=0.4)
+        experiences = get_experience(size=20, model=Q_model, exploration=0.7)
         random.shuffle(experiences)
         states = np.array([data.state for data in experiences])
         targets = target_model.predict(states, verbose=0) 
         next_states = np.array([data.next_state for data in experiences])
         next_q_values = target_model.predict(next_states, verbose=0)  
-        
-        for idx, data in enumerate(experiences):
-            new_target_max = data.step_reward + DISCOUNT_FACTOR * np.max(next_q_values[idx])
-            targets[idx][data.action] = new_target_max
-        
-        Q_model.fit(states, targets, epochs=1, verbose=0) 
-        target_model = clone_model(Q_model)
-        target_model.set_weights(Q_model.get_weights())
-        
-    for i in tqdm(range(200), desc="Fase 2"):
-        experiences_batch = train_batch(size=20, model=Q_model, check_rate=10, exploration=0.2)
-        random.shuffle(experiences_batch)
-        for data in experiences_batch:
-            target_value = target_model.predict(data.state, verbose=0) 
-            new_target_max = data.step_reward + DISCOUNT_FACTOR * np.max(target_model.predict(data.next_state, verbose=0))  # Added verbose=0
-            target_value[0][data.action] = new_target_max
-            Q_model.fit(data.state, target_value, verbose=0) 
-        target_model = clone_model(Q_model)
-        target_model.set_weights(Q_model.get_weights())    
     
+    for idx, data in enumerate(experiences):
+        new_target_max = data.step_reward + DISCOUNT_FACTOR * np.max(next_q_values[idx])
+        targets[idx][data.action] = new_target_max
+    
+    Q_model.fit(states, targets, epochs=1, verbose=0) 
+    target_model = clone_model(Q_model)
+    target_model.set_weights(Q_model.get_weights())
+    return Q_model,target_model
+
+def train(Q_model):
+    target_model = clone_model(Q_model)
+    target_model.set_weights(Q_model.get_weights())
+    Q_model,target_model=episode(Q_model,target_model,0.7)
+    Q_model,target_model=episode(Q_model,target_model,0.4)
+    Q_model,target_model=episode(Q_model,target_model,0.2)
+   
     return Q_model
 
 def try_model(model):
