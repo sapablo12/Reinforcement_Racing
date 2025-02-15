@@ -39,50 +39,36 @@ def agent_touch_green_spot(agent_x, agent_y, green_spots, canvas, draw_image):
             return 100  # Reward for touching a green spot
     return 0
 
-def run_simulation(agent,check_rate=2):
+def run_simulation(agent, check_rate=2):
     running = True
     clock = pygame.time.Clock()
-    
-    # Initialize timer
-    start_ticks = pygame.time.get_ticks()  # Record the starting time
+    start_ticks = pygame.time.get_ticks()
     timer_font = pygame.font.Font(None, 36)
-
-    game_active = True  # Track active state for the agent
-    elapsed_seconds = 0  # Initialize elapsed time for the agent
-    last_displacement_check = 0  # Time of the last displacement check
+    game_active = True
+    elapsed_seconds = 0
+    last_displacement_check = 0
 
     while running:
-        screen.fill((255, 255, 255))  # Fill screen with white
-
-        # Draw the track if it exists
+        screen.fill((255, 255, 255))
         if track:
             screen.blit(track, (0, 0))
-
-        # Handle events
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
         if game_active:
-            # Update and draw the agent
             agent.update2()
             agent.draw(screen)
-
-            # Check for interaction with green spots
-            #reward = agent_touch_green_spot(agent.x, agent.y, painter.green_spots, painter.canvas, painter.draw_image)
-            #agent.reward += reward
-
-            # Calculate and display timer
-            elapsed_seconds = (pygame.time.get_ticks() - start_ticks) / 1000  # Convert to seconds
+            elapsed_seconds = (pygame.time.get_ticks() - start_ticks) / 1000
             timer_text = timer_font.render(f"Time: {elapsed_seconds:.2f} s", True, (0, 0, 0))
-            screen.blit(timer_text, (20, 20)) 
-
+            screen.blit(timer_text, (20, 20))
+            
             # Check displacement every 5 seconds
             if elapsed_seconds - last_displacement_check >= check_rate:
                 
                 last_displacement_check = elapsed_seconds
 
-            """if elapsed_seconds >= 4: 
+            if elapsed_seconds >= 4: 
                 if elapsed_seconds>=30:
                     agent.active = False
                     
@@ -90,28 +76,18 @@ def run_simulation(agent,check_rate=2):
                     agent.active = False
                 # Modified displacements check to compute Euclidean distance
                 if len(agent.displacements) > 1 and np.linalg.norm(np.array(agent.displacements[-1]) - np.array(agent.displacements[-3])) < 0.5:
-                    agent.active = False"""
+                    agent.active = False
                     
 
             agent.check_wall()
-            # Check if the agent is finished or inactive
-            if  agent.finish:
+            if agent.finish or not agent.active:
                 game_active = False
-                
-                
-            if not agent.active:
-                game_active = False
-                
-            return agent.data
-            
-
-        # Check if the agent is finished or inactive
-        if not game_active:
+        else:
             running = False
 
-        # Update display
         pygame.display.flip()
-        clock.tick(60)  # Cap the frame rate at 60 FPS
+        clock.tick(60)
+    return agent.data  # Moved return outside of the loop
 
 def tweak_random(flat_weights, sigma, ratio):
     index = []
@@ -133,8 +109,8 @@ def train_batch(size,model,check_rate):
         
 def train(model):
     wmodel=model
-    for i in tqdm(range(1), desc="Fase 1"):
-        experiences=train_batch(size=10,model=wmodel,sigma=0.05,ratio=30,check_rate=1)
+    for i in tqdm(range(100), desc="Fase 1"):
+        experiences=train_batch(size=10,model=wmodel,check_rate=10)
   
     return wmodel
 def try_model(model):
