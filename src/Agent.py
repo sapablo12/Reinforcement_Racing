@@ -9,15 +9,15 @@ from base_model import *  # Import the functions from base_model.py
 
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 
-# Add new class Info for storing update data
+# Update Info so state and next_state are tf.Tensor objects
 class Info:
-    def __init__(self, state, output, act,step_reward, next_state, done_flag):
-        self.state = state
-        self.output = output
-        self.action=act
+    def __init__(self, state, output, act, step_reward, next_state, done_flag):
+        self.state = state          # tf.Tensor of shape (6,)
+        self.output = output        # tf.Tensor from model output
+        self.action = act
         self.step_reward = step_reward
         self.done_flag = done_flag
-        self.next_state=next_state
+        self.next_state = next_state  # tf.Tensor of shape (6,)
 
 class Agent:
     def __init__(self, track, model: Model,weights,exploration):  # Add type hint for model
@@ -152,8 +152,9 @@ class Agent:
     def update(self):
         if self.active:
             if self.model is not None:
-                state = tf.concat([self.sensors, [[self.speed / 10.0]]], axis=1)  # Normalize speed to 0-1
-                output = self.model(state)
+                # Build state as a (1,6) tensor then squeeze to (6,)
+                state = tf.squeeze(tf.concat([self.sensors, tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
+                output = self.model(tf.expand_dims(state, axis=0))  # model expects batch dimension
                 act = tf.argmax(output, axis=1).numpy()[0]
                 actions = {
                         0: self.dec_angle,
@@ -162,19 +163,15 @@ class Agent:
                         3: self.dec_speed,
                     }
                 if np.random.rand() < self.epsilon:  # Exploration
-                    act=np.random.choice(4)
+                    act = np.random.choice(4)
                 actions.get(act, lambda: None)()
                 # Update the position of the agent based on speed and angle
                 self.x += self.speed * np.cos(np.radians(self.angle))
                 self.y += self.speed * np.sin(np.radians(self.angle))
                 self.total_distance += self.speed
-                self.total_time += 1  # Assuming each update is one time unit
-
-                # Append new displacement data (x, y) to self.displacements
+                self.total_time += 1
                 new_displacement = (self.x, self.y)
                 self.displacements.append(new_displacement)
-
-                # Keep the agent within screen bounds
                 if self.x <= 0 or self.x >= SCREEN_WIDTH or self.y <= 0 or self.y >= SCREEN_HEIGHT:
                     self.active = False
                 else:
@@ -183,42 +180,30 @@ class Agent:
                         self.active = False
                     elif color == (255, 0, 0):
                         self.finish = True
-                
-                # Calculate reward for this step
                 step_reward = self.calculate_step_reward()
-                print(step_reward)
-                # Update sensors for the next time step
-                
                 next_sensors = self.update_sensors().numpy().tolist()
-
-                # Determine if the agent is done
+                # Build next_state as tensor of shape (6,)
+                next_state = tf.squeeze(tf.concat([tf.convert_to_tensor(next_sensors, dtype=tf.float32), tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
                 done_flag = 1.0 if self.finish else 0.0
-                next_state=tf.concat([next_sensors, [[self.speed / 10.0]]], axis=1)
-                # Replace tuple with Info instance
-                new_data = Info(state, output.numpy().tolist(),act, step_reward, next_state, done_flag)
+                # Store tensors directly in Info
+                new_data = Info(state, output, act, step_reward, next_state, done_flag)
                 self.data.append(new_data)
-                
                 self.x = np.clip(self.x, 0, SCREEN_WIDTH)
                 self.y = np.clip(self.y, 0, SCREEN_HEIGHT)
         else:
+            # In inactive branch, build a dummy state tensor of shape (6,)
             new_displacement = (self.x, self.y)
             self.displacements.append(new_displacement)
             step_reward = self.calculate_step_reward()
-            print(step_reward)
-            
-
-            # Determine if the agent is done
             done_flag = 1.0 if self.finish else 0.0
             if not self.finish:
                 step_reward = -100
                 done_flag = 0.0
             else:
                 done_flag = 1.0
-                print("Ha muerto" + done_flag)
-            # Define output for consistency in the inactive branch
             output = tf.zeros([1, 2])
-            # Replace tuple with Info instance
-            new_data = Info(tf.zeros([1, 5]).numpy().tolist(), output.numpy().tolist(), np.random.rand(0, 4), step_reward, tf.zeros([1, 5]).numpy().tolist(), done_flag)
+            state = tf.squeeze(tf.concat([tf.zeros([1, 5], dtype=tf.float32), tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
+            new_data = Info(state, output, np.random.rand(), step_reward, state, done_flag)
             self.data.append(new_data)
 
     def calculate_step_reward(self):
@@ -248,66 +233,6 @@ class Agent:
 
     
     def update2(self):
-            if self.active:
-                keys = pygame.key.get_pressed()
-                # Compute continuous delta values
-                # Adjust angle directly with left/right arrows
-                if keys[pygame.K_a]:
-                    self.dec_angle()
-                if keys[pygame.K_d]:
-                    self.inc_angle()
-                # Adjust speed continuously with up/down arrows
-                
-                if keys[pygame.K_w]:
-                    self.inc_speed()
-                if keys[pygame.K_s]:
-                    self.dec_speed()
-
-                # Accumulate and clamp the continuous values between 0.0 and 1.0
-
-                # Create user output using the continuous values
-                output = tf.convert_to_tensor([[0,0]], dtype=tf.float32)
-                
-                # ...existing code for updating position...
-                self.x += self.speed * np.cos(np.radians(self.angle))
-                self.y += self.speed * np.sin(np.radians(self.angle))
-                self.total_distance += self.speed
-                self.total_time += 1
-
-                new_displacement = (self.x, self.y)
-                self.displacements.append(new_displacement)
-
-                if self.x <= 0 or self.x >= SCREEN_WIDTH or self.y <= 0 or self.y >= SCREEN_HEIGHT:
-                    self.active = False
-                else:
-                    color = self.track.get_at((int(self.x), int(self.y)))
-                    if color == (0, 0, 0) or color == (0, 255, 0):
-                        self.active = False
-                    elif color == (255, 0, 0):
-                        self.finish = True
-
-                step_reward = self.calculate_step_reward()
-                #zprint(step_reward)
-                next_sensors = self.update_sensors().numpy().tolist()
-                done_flag = 1.0 if self.finish else 0.0
-                new_data = Info(self.sensors.numpy().tolist(), output.numpy().tolist(), step_reward, next_sensors, done_flag)
-                self.data.append(new_data)
-
-                self.x = np.clip(self.x, 0, SCREEN_WIDTH)
-                self.y = np.clip(self.y, 0, SCREEN_HEIGHT)
-            else:
-                new_displacement = (self.x, self.y)
-                self.displacements.append(new_displacement)
-                step_reward = self.calculate_step_reward()
-                #print(step_reward)
-                done_flag = 1.0 if self.finish else 0.0
-                if not self.finish:
-                    step_reward = -100
-                    done_flag = 0.0
-                else:
-                    done_flag = 1.0
-                output = tf.zeros([1, 2])
-                new_data = Info(tf.zeros([1, 5]).numpy().tolist(), output.numpy().tolist(), step_reward, tf.zeros([1, 5]).numpy().tolist(), done_flag)
                 self.data.append(new_data)
 
     def dec_angle(self):

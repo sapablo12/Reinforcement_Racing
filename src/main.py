@@ -8,6 +8,7 @@ from tensorflow.keras.models import load_model, Model, clone_model
 import numpy as np
 from tqdm import tqdm  # Add import for tqdm
 from base_model import *
+import random
 #// vscode-fold=#
 # Initialize Pygame
 pygame.init()
@@ -63,7 +64,9 @@ def run_simulation(agent, check_rate=2):
             elapsed_seconds = (pygame.time.get_ticks() - start_ticks) / 1000
             timer_text = timer_font.render(f"Time: {elapsed_seconds:.2f} s", True, (0, 0, 0))
             screen.blit(timer_text, (20, 20))
-            
+            # Draw the cumulative reward on screen
+            reward_text = timer_font.render(f"Reward: {agent.calculate_step_reward():.2f}", True, (0, 0, 0))
+            screen.blit(reward_text, (SCREEN_WIDTH - reward_text.get_width() - 20, SCREEN_HEIGHT - reward_text.get_height() - 20))
             # Check displacement every 5 seconds
             if elapsed_seconds - last_displacement_check >= check_rate:
                 
@@ -73,11 +76,9 @@ def run_simulation(agent, check_rate=2):
                 if elapsed_seconds>=30:
                     agent.active = False
                     
-                if agent.speed < 0.1:
+                if agent.speed < 0.05:
                     agent.active = False
                 # Modified displacements check to compute Euclidean distance
-                if len(agent.displacements) > 1 and np.linalg.norm(np.array(agent.displacements[-1]) - np.array(agent.displacements[-3])) < 0.5:
-                    agent.active = False
                     
 
             agent.check_wall()
@@ -100,35 +101,42 @@ def tweak_random(flat_weights, sigma, ratio):
     return flat_weights
 
 
-def train_batch(size,model,check_rate,exploration):
-    experiences = []
+def train_batch(size,model,check_rate,exploration):  
+    experiences_batch = []
     flat_weights=flatten_weights(model.trainable_variables)
-    current_agent = Agent(track, model=model,weights=flat_weights,exploration=exploration)
     for i in range(size): 
-        run_simulation(current_agent,check_rate)  
-    return experiences
+        current_agent = Agent(track, model=model,weights=flat_weights,exploration=exploration)
+        for experiences in run_simulation(current_agent,check_rate):
+            experiences_batch.append(experiences)
+    return experiences_batch
         
 def train(Q_model):
     target_model = clone_model(Q_model)
     target_model.set_weights(Q_model.get_weights())
     for i in tqdm(range(30), desc="Fase 1"):
-        experiences = train_batch(size=20, model=Q_model, check_rate=10,exploration=0.4)
-        np.random.shuffle(experiences)
-        for data in experiences:
-            target_value=target_model.predict(data.state)
-            new_target_max=data.reward+DISCOUNT_FACTOR*np.max(target_model.predict(data.next_state))
-            target_value[0][data.action]=new_target_max
-            Q_model.fit(data.state,target_value, verbose=0)
+        experiences = train_batch(size=10, model=Q_model, check_rate=10,exploration=0.4)
+        random.shuffle(experiences)
+        states = np.array([data.state for data in experiences])
+        targets = target_model.predict(states)
+        next_states = np.array([data.next_state for data in experiences])
+        next_q_values = target_model.predict(next_states)
+        
+        for idx, data in enumerate(experiences):
+            new_target_max = data.step_reward + DISCOUNT_FACTOR * np.max(next_q_values[idx])
+            targets[idx][data.action] = new_target_max
+        print(states.shape)
+        Q_model.fit(states, targets, epochs=1, verbose=0)  # Ensure verbose=0
         target_model = clone_model(Q_model)
-        target_model.set_weights(Q_model.get_weights())    
+        target_model.set_weights(Q_model.get_weights())
+        
     for i in tqdm(range(30), desc="Fase 2"):
-        experiences = train_batch(size=20, model=Q_model, check_rate=10,exploration=0.2)
-        np.random.shuffle(experiences)
-        for data in experiences:
-            target_value=target_model.predict(data.state)
-            new_target_max=data.reward+DISCOUNT_FACTOR*np.max(target_model.predict(data.next_state))
-            target_value[0][data.action]=new_target_max
-            Q_model.fit(data.state,target_value, verbose=0)
+        experiences_batch = train_batch(size=20, model=Q_model, check_rate=10, exploration=0.2)
+        random.shuffle(experiences_batch)
+        for data in experiences_batch:
+            target_value = target_model.predict(data.state)
+            new_target_max = data.step_reward + DISCOUNT_FACTOR * np.max(target_model.predict(data.next_state))
+            target_value[0][data.action] = new_target_max
+            Q_model.fit(data.state, target_value, verbose=0)  # Ensure verbose=0
         target_model = clone_model(Q_model)
         target_model.set_weights(Q_model.get_weights())    
     
