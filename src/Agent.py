@@ -141,7 +141,6 @@ class Agent:
                     return distance
                 elif color == (255, 0, 0):  # Red color indicates a finish line
                     if distance == 0:
-                        self.active = False
                         self.finish = True
                     return distance
             else:
@@ -176,7 +175,7 @@ class Agent:
                     self.active = False
                 else:
                     color = self.track.get_at((int(self.x), int(self.y)))
-                    if color == (0, 0, 0) or color == (0, 255, 0):
+                    if color == (0, 0, 0):
                         self.active = False
                     elif color == (255, 0, 0):
                         self.finish = True
@@ -208,13 +207,15 @@ class Agent:
 
     def calculate_step_reward(self):
        if self.active:
-            if self.finish:
-                    return self.speed + 1*self.dispersion() + 1000
+            if not self.finish:
+                    if self.speed < 0.01:
+                        return -10 + 5*self.sensors.numpy()[0][0]
+                    return 2*self.speed + 5*self.sensors.numpy()[0][0]
             else:
-                    return self.speed + 0.1*self.dispersion(150)
+                    return 2*self.speed + 1000
        else:
             if self.finish:
-                return self.speed+1000
+                return 2*self.speed+1000
             else:
                 return -1000
 

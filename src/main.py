@@ -76,7 +76,7 @@ def run_simulation(agent, check_rate=2):
                 if elapsed_seconds>=30:
                     agent.active = False
                     
-                if agent.speed < 0.05:
+                if agent.speed < 0.01:
                     agent.active = False
                 # Modified displacements check to compute Euclidean distance
                     
@@ -113,30 +113,30 @@ def train_batch(size,model,check_rate,exploration):
 def train(Q_model):
     target_model = clone_model(Q_model)
     target_model.set_weights(Q_model.get_weights())
-    for i in tqdm(range(30), desc="Fase 1"):
-        experiences = train_batch(size=10, model=Q_model, check_rate=10,exploration=0.4)
+    for i in tqdm(range(100), desc="Fase 1"):
+        experiences = train_batch(size=20, model=Q_model, check_rate=10, exploration=0.4)
         random.shuffle(experiences)
         states = np.array([data.state for data in experiences])
-        targets = target_model.predict(states)
+        targets = target_model.predict(states, verbose=0) 
         next_states = np.array([data.next_state for data in experiences])
-        next_q_values = target_model.predict(next_states)
+        next_q_values = target_model.predict(next_states, verbose=0)  
         
         for idx, data in enumerate(experiences):
             new_target_max = data.step_reward + DISCOUNT_FACTOR * np.max(next_q_values[idx])
             targets[idx][data.action] = new_target_max
-        print(states.shape)
-        Q_model.fit(states, targets, epochs=1, verbose=0)  # Ensure verbose=0
+        
+        Q_model.fit(states, targets, epochs=1, verbose=0) 
         target_model = clone_model(Q_model)
         target_model.set_weights(Q_model.get_weights())
         
-    for i in tqdm(range(30), desc="Fase 2"):
+    for i in tqdm(range(200), desc="Fase 2"):
         experiences_batch = train_batch(size=20, model=Q_model, check_rate=10, exploration=0.2)
         random.shuffle(experiences_batch)
         for data in experiences_batch:
-            target_value = target_model.predict(data.state)
-            new_target_max = data.step_reward + DISCOUNT_FACTOR * np.max(target_model.predict(data.next_state))
+            target_value = target_model.predict(data.state, verbose=0) 
+            new_target_max = data.step_reward + DISCOUNT_FACTOR * np.max(target_model.predict(data.next_state, verbose=0))  # Added verbose=0
             target_value[0][data.action] = new_target_max
-            Q_model.fit(data.state, target_value, verbose=0)  # Ensure verbose=0
+            Q_model.fit(data.state, target_value, verbose=0) 
         target_model = clone_model(Q_model)
         target_model.set_weights(Q_model.get_weights())    
     
