@@ -205,12 +205,69 @@ class Agent:
             new_data = Info(state, output, np.random.rand(), step_reward, state, done_flag)
             self.data.append(new_data)
 
+    def update2(self):
+        if self.active:
+            # Build state as a (1,6) tensor then squeeze to (6,)
+            state = tf.squeeze(tf.concat([self.sensors, tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
+            # Use WASD for manual control
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_a]:
+                self.dec_angle()
+            if keys[pygame.K_d]:
+                self.inc_angle()
+            if keys[pygame.K_w]:
+                self.inc_speed()
+            if keys[pygame.K_s]:
+                self.dec_speed()
+            # Update position based on manual inputs
+            self.x += self.speed * np.cos(np.radians(self.angle))
+            self.y += self.speed * np.sin(np.radians(self.angle))
+            self.total_distance += self.speed
+            self.total_time += 1
+            new_displacement = (self.x, self.y)
+            self.displacements.append(new_displacement)
+            if self.x <= 0 or self.x >= SCREEN_WIDTH or self.y <= 0 or self.y >= SCREEN_HEIGHT:
+                self.active = False
+            else:
+                color = self.track.get_at((int(self.x), int(self.y)))
+                if color == (0, 0, 0):
+                    self.active = False
+                elif color == (255, 0, 0):
+                    self.finish = True
+            step_reward = self.calculate_step_reward()
+            next_sensors = self.update_sensors().numpy().tolist()
+            # Build next_state as tensor of shape (6,)
+            next_state = tf.squeeze(tf.concat([tf.convert_to_tensor(next_sensors, dtype=tf.float32),
+                                                tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
+            done_flag = 1.0 if self.finish else 0.0
+            # Store None for model output and action since manual input is used
+            new_data = Info(state, None, None, step_reward, next_state, done_flag)
+            self.data.append(new_data)
+            self.x = np.clip(self.x, 0, SCREEN_WIDTH)
+            self.y = np.clip(self.y, 0, SCREEN_HEIGHT)
+        else:
+            # In inactive branch, build a dummy state tensor of shape (6,)
+            new_displacement = (self.x, self.y)
+            self.displacements.append(new_displacement)
+            step_reward = self.calculate_step_reward()
+            done_flag = 1.0 if self.finish else 0.0
+            if not self.finish:
+                step_reward = -100
+                done_flag = 0.0
+            else:
+                done_flag = 1.0
+            output = tf.zeros([1, 2])
+            state = tf.squeeze(tf.concat([tf.zeros([1, 5], dtype=tf.float32),
+                                           tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
+            new_data = Info(state, output, None, step_reward, state, done_flag)
+            self.data.append(new_data)
+
     def calculate_step_reward(self):
        if self.active:
             if not self.finish:
                     if self.speed < 0.01:
                         return -10 + 5*self.sensors.numpy()[0][0]
-                    return 2*self.speed + 5*self.sensors.numpy()[0][0]
+                    return 2*self.speed + 5*self.sensors.numpy()[0][0] + 5*tf.reduce_mean(self.sensors[0, :3]).numpy()
             else:
                     return 2*self.speed + 1000
        else:
@@ -233,8 +290,6 @@ class Agent:
             screen.blit(sensor_text, (20, 50 + i * 20))
 
     
-    def update2(self):
-                self.data.append(new_data)
 
     def dec_angle(self):
         self.angle -= 2.5
