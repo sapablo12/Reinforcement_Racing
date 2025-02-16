@@ -23,7 +23,7 @@ class Agent:
     def __init__(self, track, model: Model,weights,exploration):  # Add type hint for model
         self.track = track
         self.x_initial = 0
-        self.y_initial = 420
+        self.y_initial = 460
         self.x=self.x_initial
         self.y=self.y_initial
         self.displacements = []  # Initialize self.displacements as an empty list
@@ -300,8 +300,10 @@ class Agent:
 
     def inc_speed(self):
         # Increase speed by 0.5
-        self.speed = min(10, self.speed+0.1)  # Ensure speed doesn't exceed 7.5
+        
+        self.speed = min(10, self.speed+0.13)  # Ensure speed doesn't exceed 7.5
 
     def dec_speed(self):
+        
         # Decrease speed by 0.5, ensuring it doesn't drop below zero
         self.speed = max(0, self.speed - 0.2)

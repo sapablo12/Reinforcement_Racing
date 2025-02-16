@@ -41,6 +41,10 @@ def agent_touch_green_spot(agent_x, agent_y, green_spots, canvas, draw_image):
             return 100  # Reward for touching a green spot
     return 0
 
+def save_model(model):
+    model.save("src/upmodel.keras")
+    print("Model saved to src/upmodel.keras")
+
 def run_simulation(agent):
     running = True
     clock = pygame.time.Clock()
@@ -56,6 +60,9 @@ def run_simulation(agent):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            # Check for S key press to save the model
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_s:
+                save_model(agent.model)
 
         if game_active:
             agent.update()
@@ -65,7 +72,7 @@ def run_simulation(agent):
             screen.blit(timer_text, (20, 20))
             reward_text = timer_font.render(f"Reward: {agent.calculate_step_reward():.2f}", True, (0, 0, 0))
             screen.blit(reward_text, (SCREEN_WIDTH - reward_text.get_width() - 20, SCREEN_HEIGHT - reward_text.get_height() - 20))
-            if elapsed_seconds >= 15: 
+            if elapsed_seconds >= 30: 
                 if elapsed_seconds >= 30:
                     agent.active = False
                 if agent.speed < 0.01:
