@@ -139,7 +139,7 @@ def try_model(model):
 
 def main():
     
-    Q_model = load_model("src/Q_model.keras")  # Updated to native Keras format
+    Q_model = load_model("src/upmodel.keras")  # Updated to native Keras format
     wmodel = train(Q_model)
     wmodel.save("src/defmodel.keras")  # Save using the native Keras format
     #try_model(model)
