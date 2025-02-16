@@ -20,10 +20,10 @@ class Info:
         self.next_state = next_state  # tf.Tensor of shape (6,)
 
 class Agent:
-    def __init__(self, track, model: Model,weights,exploration):  # Add type hint for model
+    def __init__(self, track, model: Model,weights,exploration, color="blue"):  # Add type hint for model
         self.track = track
         self.x_initial = 0
-        self.y_initial = 460
+        self.y_initial = 420
         self.x=self.x_initial
         self.y=self.y_initial
         self.displacements = []  # Initialize self.displacements as an empty list
@@ -41,6 +41,7 @@ class Agent:
         self.reward=0
         self.font = pygame.font.Font(None, 24)  # Font for displaying sensor values
         self.data = []  # Initialize self.data as an empty list
+        self.color = color  # New attribute affecting agent color
         # Initialize manual controls for continuous user input
     def draw(self, screen):
         # Draw the agent as a square
@@ -53,11 +54,14 @@ class Agent:
         ]
         rotated_points = [self.rotate_point(px, py, self.angle) for px, py in points]
         rotated_points = [(int(px), int(py)) for px, py in rotated_points]  # Ensure points are number pairs
-        pygame.draw.polygon(screen, (0, 0, 255), rotated_points)
+        pygame.draw.polygon(screen, (0, 0, 255) if self.color=="blue" else (0,255,0), rotated_points)
 
         # Draw sensors
         self.draw_sensors(screen)
-        self.display_sensor_values(screen)
+        if self.color == "green":
+            self.display_sensor_values(screen)
+            self.display_reward(screen)
+
     def rotate_point(self, px, py, angle):
         # Rotate a point around the agent's center using NumPy
         rad_angle = np.radians(angle)
@@ -289,7 +293,10 @@ class Agent:
             sensor_text = self.font.render(f"Sensor {i+1}: {value:.2f}", True, (0, 0, 0))
             screen.blit(sensor_text, (20, 50 + i * 20))
 
-    
+    def display_reward(self, screen):
+        reward = self.calculate_step_reward()
+        reward_text = self.font.render(f"Reward: {reward}", True, (0, 0, 0))
+        screen.blit(reward_text, (600, 550))
 
     def dec_angle(self):
         self.angle -= 2.5
@@ -300,10 +307,8 @@ class Agent:
 
     def inc_speed(self):
         # Increase speed by 0.5
-        
-        self.speed = min(10, self.speed+0.13)  # Ensure speed doesn't exceed 7.5
+        self.speed = min(10, self.speed+0.1)  # Ensure speed doesn't exceed 7.5
 
     def dec_speed(self):
-        
         # Decrease speed by 0.5, ensuring it doesn't drop below zero
         self.speed = max(0, self.speed - 0.2)
