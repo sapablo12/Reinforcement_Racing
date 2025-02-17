@@ -61,6 +61,7 @@ class Agent:
         if self.color == "green":
             self.display_sensor_values(screen)
             self.display_reward(screen)
+            self.display_speed(screen)
 
     def rotate_point(self, px, py, angle):
         # Rotate a point around the agent's center using NumPy
@@ -97,7 +98,7 @@ class Agent:
 
         
     def draw_sensors(self, screen):
-        sensor_length = 100
+        sensor_length = 250
         sensor_angles = np.array([0, -45, 45, -90, 90])  # Front, front-left, front-right, left, right
         sensor_colors = (0, 0, 255)  # blue color for sensors
 
@@ -106,7 +107,7 @@ class Agent:
         for i, angle_offset in enumerate(sensor_angles):
             angle = self.angle + angle_offset
             distance = self.calculate_sensor_distance(angle, sensor_length)
-            new_sensor_values.append(distance / 100)
+            new_sensor_values.append(distance / sensor_length)
 
             # Calculate the end point of the sensor line
             end_x = self.x + distance * np.cos(np.radians(angle))
@@ -267,18 +268,17 @@ class Agent:
             self.data.append(new_data)
 
     def calculate_step_reward(self):
+       
        if self.active:
             if not self.finish:
                     if self.speed < 0.01:
                         return -10 + 5*self.sensors.numpy()[0][0]
-                    return 4*self.speed + 5*self.sensors.numpy()[0][0] + 5*tf.reduce_mean(self.sensors[0, :3]).numpy()
+                    return 8*self.speed -min(10,(1/self.sensors.numpy()[0][0])) + 5*tf.reduce_mean(self.sensors[0, :3]).numpy()
+                        #between 0-80                 #between -1 and -10                                       #between 0 and 4
             else:
                     return 4*self.speed + 1000
        else:
-            if self.finish:
-                return 4*self.speed+1000
-            else:
-                return -1000
+            return -1000
 
 
     def calculate_mean_speed(self):
@@ -297,7 +297,10 @@ class Agent:
         reward = self.calculate_step_reward()
         reward_text = self.font.render(f"Reward: {reward}", True, (0, 0, 0))
         screen.blit(reward_text, (600, 550))
-
+    def display_speed(self, screen):
+            speed = self.speed
+            speed_text = self.font.render(f"Speed: {self.speed:.2f}", True, (0, 0, 0))
+            screen.blit(speed_text, (600, 570))
     def dec_angle(self):
         self.angle -= 2.5
 
@@ -307,8 +310,8 @@ class Agent:
 
     def inc_speed(self):
         # Increase speed by 0.5
-        self.speed = min(10, self.speed+0.1)  # Ensure speed doesn't exceed 7.5
+        self.speed = min(10, self.speed+0.5)  # Ensure speed doesn't exceed 10
 
     def dec_speed(self):
         # Decrease speed by 0.5, ensuring it doesn't drop below zero
-        self.speed = max(0, self.speed - 0.2)
+        self.speed = max(0, self.speed - 0.8)

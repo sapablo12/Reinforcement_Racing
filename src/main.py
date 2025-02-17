@@ -12,7 +12,6 @@ import random
 #// vscode-fold=#
 # Initialize Pygame
 pygame.init()
-LEARNING_RATE = 0.01
 DISCOUNT_FACTOR = 0.95
 # Define screen dimensions
 SCREEN_WIDTH = 800
@@ -72,8 +71,8 @@ def run_simulation(agents):
                     if agent.speed < 0.01:
                         agent.active = False
                 agent.check_wall()
-                if agent.finish or not agent.active:
-                    game_active = False
+            if all(agent.finish or not agent.active for agent in agents):
+                game_active = False
         else:
             running = False
 
@@ -96,15 +95,22 @@ def tweak_random(flat_weights, sigma, ratio):
 
 
 def get_experience(size, model, exploration):  
-    flat_weights = flatten_weights(model.trainable_variables)
-    current_agents = [Agent(track, model=model, weights=flat_weights, exploration=exploration,
-                            color="green" if i == 0 else "blue")
-                      for i in range(size)]
-    return run_simulation(current_agents)
+    all_experiences = []
+    num_simulations = -(-size // 20)  # Ceiling division
+    for _ in range(num_simulations):
+        flat_weights = flatten_weights(model.trainable_variables)
+        current_agents = [Agent(track, model=model, weights=flat_weights, exploration=exploration,
+                                color="green" if i == 0 else "blue")
+                          for i in range(20)]
+        experiences = run_simulation(current_agents)
+        all_experiences.extend(experiences)
+    return all_experiences
 
-def episode(Q_model, target_model,exploration=0.7):   
-    for i in tqdm(range(100), desc="Fase exploration = "+str(exploration)):
-        experiences = get_experience(size=20, model=Q_model, exploration=exploration)
+def episode(Q_model, target_model,exploration=0.7,size=100,batch_size=50):   
+    for i in tqdm(range(size), desc="Fase exploration = "+str(exploration)):
+        k=-1*(1/size)*np.log(0.05/exploration)
+        exp = 0.05 +(exploration-0.05)*np.exp(-k*i)
+        experiences = get_experience(size=batch_size, model=Q_model, exploration=exp)
         random.shuffle(experiences)
         states = np.array([data.state for data in experiences])
     
@@ -124,7 +130,7 @@ def episode(Q_model, target_model,exploration=0.7):
 def train(Q_model):
     target_model = clone_model(Q_model)
     target_model.set_weights(Q_model.get_weights())
-    Q_model, target_model = episode(Q_model, target_model,0.2)
+    Q_model, target_model = episode(Q_model, target_model,0.7)
     Q_model, target_model = episode(Q_model, target_model,0.4)
     Q_model, target_model = episode(Q_model, target_model,0.2)
    
