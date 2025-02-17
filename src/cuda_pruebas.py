@@ -7,7 +7,7 @@ print(tf.config.list_physical_devices('GPU'))
 
 import matplotlib.pyplot as plt
 
-size = 100  # Define size
+"""size = 100  # Define size
 exploration = 0.7  # Define exploration
 N = 100  # Number of iterations
 
@@ -24,4 +24,6 @@ plt.xlabel('N')
 plt.ylabel('exp')
 plt.title('exp over N')
 plt.show()
-print(exp)
+print(exp)"""
+a=[1,4,5,67,7,8,9]
+print
