@@ -65,9 +65,9 @@ def run_simulation(agents):
             screen.blit(timer_text, (20, 20))
             #reward_text = timer_font.render(f"Reward: {agents.calculate_step_reward():.2f}", True, (0, 0, 0))
             #screen.blit(reward_text, (SCREEN_WIDTH - reward_text.get_width() - 20, SCREEN_HEIGHT - reward_text.get_height() - 20))
-            if elapsed_seconds >= 30:
+            if elapsed_seconds >= 120:
                 for agent in agents: 
-                    if elapsed_seconds >= 30:
+                    if elapsed_seconds >= 120:
                         agent.active = False
                     if agent.speed < 0.01:
                         agent.active = False
@@ -102,9 +102,9 @@ def get_experience(size, model, exploration):
                       for i in range(size)]
     return run_simulation(current_agents)
 
-def episode(Q_model,target_model,exploration):   
-    for i in tqdm(range(100), desc="Fase 1"):
-        experiences = get_experience(size=20, model=Q_model, exploration=0.7)
+def episode(Q_model, target_model,exploration=0.7):   
+    for i in tqdm(range(100), desc="Fase exploration = "+str(exploration)):
+        experiences = get_experience(size=20, model=Q_model, exploration=exploration)
         random.shuffle(experiences)
         states = np.array([data.state for data in experiences])
     
@@ -112,21 +112,21 @@ def episode(Q_model,target_model,exploration):
         next_states = np.array([data.next_state for data in experiences])
         next_q_values = target_model.predict(next_states, verbose=0)  
     
-    for idx, data in enumerate(experiences):
-        new_target_max = data.step_reward + DISCOUNT_FACTOR * np.max(next_q_values[idx])
-        targets[idx][data.action] = new_target_max
+        for idx, data in enumerate(experiences):
+            new_target_max = data.step_reward + DISCOUNT_FACTOR * np.max(next_q_values[idx])
+            targets[idx][data.action] = new_target_max
     
-    Q_model.fit(states, targets, epochs=1, verbose=0) 
-    target_model = clone_model(Q_model)
-    target_model.set_weights(Q_model.get_weights())
-    return Q_model,target_model
+        Q_model.fit(states, targets, epochs=1, verbose=0) 
+        if i % 10 == 0:  # Update target model periodically
+            target_model.set_weights(Q_model.get_weights())
+    return Q_model, target_model
 
 def train(Q_model):
     target_model = clone_model(Q_model)
     target_model.set_weights(Q_model.get_weights())
-    Q_model,target_model=episode(Q_model,target_model,0.7)
-    Q_model,target_model=episode(Q_model,target_model,0.4)
-    Q_model,target_model=episode(Q_model,target_model,0.2)
+    Q_model, target_model = episode(Q_model, target_model,0.2)
+    Q_model, target_model = episode(Q_model, target_model,0.4)
+    Q_model, target_model = episode(Q_model, target_model,0.2)
    
     return Q_model
 
@@ -137,7 +137,7 @@ def try_model(model):
 def main():
     
     Q_model = load_model("src/upmodel.keras")
-    model.compile(optimizer='adam', 
+    Q_model.compile(optimizer='adam', 
               loss='mean_squared_error', 
               metrics=['accuracy'])  # Updated to native Keras format
     wmodel = train(Q_model)

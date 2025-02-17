@@ -14,7 +14,7 @@ class Info:
     def __init__(self, state, output, act, step_reward, next_state, done_flag):
         self.state = state          # tf.Tensor of shape (6,)
         self.output = output        # tf.Tensor from model output
-        self.action = act
+        self.action = int(act)
         self.step_reward = step_reward
         self.done_flag = done_flag
         self.next_state = next_state  # tf.Tensor of shape (6,)
@@ -271,12 +271,12 @@ class Agent:
             if not self.finish:
                     if self.speed < 0.01:
                         return -10 + 5*self.sensors.numpy()[0][0]
-                    return 2*self.speed + 5*self.sensors.numpy()[0][0] + 5*tf.reduce_mean(self.sensors[0, :3]).numpy()
+                    return 4*self.speed + 5*self.sensors.numpy()[0][0] + 5*tf.reduce_mean(self.sensors[0, :3]).numpy()
             else:
-                    return 2*self.speed + 1000
+                    return 4*self.speed + 1000
        else:
             if self.finish:
-                return 2*self.speed+1000
+                return 4*self.speed+1000
             else:
                 return -1000
 
