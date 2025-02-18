@@ -89,12 +89,12 @@ def run_simulation(agents):
 def get_experience(size, model, exploration):  
     all_experiences = []
     priority_batch=[]
-    num_simulations = -(-size // 20)  # Ceiling division
+    num_simulations = -(-size // 5)  # Ceiling division
     for _ in range(num_simulations):
         flat_weights = flatten_weights(model.trainable_variables)
         current_agents = [Agent(track, model=model, weights=flat_weights, exploration=exploration,
                                 color="green" if i == 0 else "blue")
-                          for i in range(20)]
+                          for i in range(5)]
         experiences,priorities = run_simulation(current_agents)
         all_experiences.extend(experiences)
         priority_batch.extend(priorities)

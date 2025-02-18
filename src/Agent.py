@@ -130,25 +130,17 @@ class Agent:
 
 
     def calculate_sensor_distance(self, angle, max_length):
-        # Calculate the distance from the agent to the point where the sensor meets a black wall
-        for distance in np.arange(0, max_length, 1):  # Decrease step size for higher resolution
+        # Calculate the distance from the agent to the point where the sensor meets a black wall; ignore red
+        for distance in np.arange(0, max_length, 1):
             sensor_x = self.x + distance * np.cos(np.radians(angle))
             sensor_y = self.y + distance * np.sin(np.radians(angle))
-            
-            # Check if the sensor point is within bounds
             if 0 <= sensor_x < SCREEN_WIDTH and 0 <= sensor_y < SCREEN_HEIGHT:
-                # Get the color of the pixel at the sensor point
                 color = self.track.get_at((int(sensor_x), int(sensor_y)))
-                if color == (0, 0, 0):  # Black color indicates a wall
+                if color == (0, 0, 0):  # Black indicates a wall
                     if distance == 0:
                         self.active = False
                     return distance
-                elif color == (255, 0, 0):  # Red color indicates a finish line
-                    if distance == 0:
-                        self.finish = True
-                    return distance
             else:
-                 # Sensor is out of bounds
                 return distance
         return max_length
     
@@ -273,12 +265,12 @@ class Agent:
                     return (-10 + 5 * self.sensors.numpy()[0][0])
                 return (2 * self.speed + 5 * self.sensors.numpy()[0][0] + 5 * tf.reduce_mean(self.sensors[0, :3]).numpy())
             else:
-                return (2 * self.speed + 1000)
+                return (2 * self.speed + 10)
        else:
             if self.finish:
                 return (2 * self.speed + 1000)
             else:
-                return (-1000)
+                return (-10)
 
 
     def calculate_mean_speed(self):
