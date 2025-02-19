@@ -32,8 +32,8 @@ track = load_track()
 
 
 def save_model(model):
-    model.save("src/upmodel.keras")
-    print("Model saved to src/upmodel.keras")
+    model.save("src/upmodel_compact.keras")
+    print("Model saved to src/upmodel_compact.keras")
 
 def run_simulation(agents):
     running = True
@@ -188,7 +188,7 @@ def manual(Q_model):
 
 def main():
     
-    Q_model = load_model("src/upmodel.keras")
+    Q_model = load_model("src/upmodel_compact.keras")
     Q_model.compile(optimizer='adam', 
               loss='mean_squared_error', 
               metrics=['accuracy']) 

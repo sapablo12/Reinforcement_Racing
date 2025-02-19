@@ -97,7 +97,7 @@ class Agent:
 
         
     def draw_sensors(self, screen):
-        sensor_length = 100
+        sensor_length = 250
         sensor_angles = np.array([0, -45, 45, -90, 90])  # Front, front-left, front-right, left, right
         sensor_colors = (0, 0, 255)  # blue color for sensors
 
@@ -106,7 +106,7 @@ class Agent:
         for i, angle_offset in enumerate(sensor_angles):
             angle = self.angle + angle_offset
             distance = self.calculate_sensor_distance(angle, sensor_length)
-            new_sensor_values.append(distance / 100)
+            new_sensor_values.append(distance / sensor_length)
 
             # Calculate the end point of the sensor line
             end_x = self.x + distance * np.cos(np.radians(angle))
@@ -273,12 +273,12 @@ class Agent:
                     return (-10 + 5 * self.sensors.numpy()[0][0])
                 return (2 * self.speed + 5 * self.sensors.numpy()[0][0] + 5 * tf.reduce_mean(self.sensors[0, :3]).numpy())
             else:
-                return (2 * self.speed + 1000)
+                return (2 * self.speed + 100)
        else:
             if self.finish:
-                return (2 * self.speed + 1000)
+                return (2 * self.speed + 100)
             else:
-                return (-1000)
+                return (-10)
 
 
     def calculate_mean_speed(self):
