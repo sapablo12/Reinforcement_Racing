@@ -86,15 +86,16 @@ def run_simulation(agents):
     return experience_batch,priority_batch
 
 
-def get_experience(size, model, exploration):  
+def get_experience(size, model, exploration):
+    run_size=20  
     all_experiences = []
     priority_batch=[]
-    num_simulations = -(-size // 5)  # Ceiling division
+    num_simulations = -(-size // run_size)  # Ceiling division
     for _ in range(num_simulations):
         flat_weights = flatten_weights(model.trainable_variables)
         current_agents = [Agent(track, model=model, weights=flat_weights, exploration=exploration,
                                 color="green" if i == 0 else "blue")
-                          for i in range(5)]
+                          for i ºin range(run_size)]
         experiences,priorities = run_simulation(current_agents)
         all_experiences.extend(experiences)
         priority_batch.extend(priorities)
@@ -129,6 +130,8 @@ def episode(Q_model, target_model,exploration=0.7,size=100,batch_size=50):
 def train(Q_model):
     target_model = clone_model(Q_model)
     target_model.set_weights(Q_model.get_weights())
+    Q_model, target_model = episode(Q_model, target_model,0.7)
+    Q_model, target_model = episode(Q_model, target_model,0.7)
     Q_model, target_model = episode(Q_model, target_model,0.7)
     Q_model, target_model = episode(Q_model, target_model,0.4)
     Q_model, target_model = episode(Q_model, target_model,0.2)
