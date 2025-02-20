@@ -95,7 +95,7 @@ def get_experience(size, model, exploration):
         flat_weights = flatten_weights(model.trainable_variables)
         current_agents = [Agent(track, model=model, weights=flat_weights, exploration=exploration,
                                 color="green" if i == 0 else "blue")
-                          for i ºin range(run_size)]
+                          for i in range(run_size)]
         experiences,priorities = run_simulation(current_agents)
         all_experiences.extend(experiences)
         priority_batch.extend(priorities)
@@ -138,9 +138,11 @@ def train(Q_model):
    
     return Q_model
 
-def try_model(model):
-    agent = Agent(track, model,flatten_weights(model.trainable_variables))
-    run_simulation(agent)
+def try_model(Q_model):
+    flat_weights = flatten_weights(Q_model.trainable_variables)
+    agent = Agent(track, model=Q_model, weights=flat_weights, exploration=0.1, color="green")
+    for i in range(100):
+        run_simulation([agent])
 
 def manual(Q_model):
     # Initialize the agent
@@ -195,11 +197,12 @@ def main():
     Q_model.compile(optimizer='adam', 
               loss='mean_squared_error', 
               metrics=['accuracy']) 
-    """while True:
-        manual(Q_model) # Updated to native Keras format"""
+    try_model(Q_model)
+    
     wmodel = train(Q_model)
     wmodel.save("src/defmodel.keras")  # Save using the native Keras format
     #try_model(model)
-
+    """while True:
+        manual(Q_model) # Updated to native Keras format"""
 if __name__ == "__main__":
     main()

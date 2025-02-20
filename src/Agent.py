@@ -8,7 +8,7 @@ from tqdm import tqdm  # Add import for tqdm
 from base_model import *  # Import the functions from base_model.py
 
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
-
+SENSOR_LENGTH = 250
 # Update Info so state and next_state are tf.Tensor objects
 class Info:
     def __init__(self, state, output, act, step_reward, next_state, done_flag):
@@ -97,7 +97,7 @@ class Agent:
 
         
     def draw_sensors(self, screen):
-        sensor_length = 250
+        sensor_length = SENSOR_LENGTH
         sensor_angles = np.array([0, -45, 45, -90, 90])  # Front, front-left, front-right, left, right
         sensor_colors = (0, 0, 255)  # blue color for sensors
 
@@ -116,7 +116,7 @@ class Agent:
         self.sensors.assign(tf.convert_to_tensor([new_sensor_values], dtype=tf.float32))
     
     def update_sensors(self):
-        sensor_length = 100
+        sensor_length = SENSOR_LENGTH
         sensor_angles = np.array([0, -45, 45, -90, 90])  # Front, front-left, front-right, left, right
 
         new_sensor_values = []
@@ -124,7 +124,7 @@ class Agent:
         for i, angle_offset in enumerate(sensor_angles):
             angle = self.angle + angle_offset
             distance = self.calculate_sensor_distance(angle, sensor_length)
-            new_sensor_values.append(distance / 100)
+            new_sensor_values.append(distance / sensor_length)
 
         return tf.convert_to_tensor([new_sensor_values], dtype=tf.float32)
 
