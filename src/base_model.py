@@ -8,8 +8,8 @@ initializer = tf.keras.initializers.RandomNormal(mean=0., stddev=1.)
 
 model = Sequential()
     
-model.add(Dense(20, input_dim=6, activation='relu', kernel_initializer=initializer))
-model.add(Dense(20, activation='relu', kernel_initializer=initializer))
+model.add(Dense(32, input_dim=6, activation='relu', kernel_initializer=initializer))
+model.add(Dense(32, activation='relu', kernel_initializer=initializer))
 model.add(Dense(4, activation=None, kernel_initializer=initializer))
 
 model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])

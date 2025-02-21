@@ -101,10 +101,10 @@ def get_experience(size, model, exploration):
         priority_batch.extend(priorities)
     return all_experiences,priority_batch
 
-def episode(Q_model, target_model,exploration=0.7,size=100,batch_size=50):   
-    for i in tqdm(range(size), desc="Fase exploration = "+str(exploration)):
-        k=-1*(1/size)*np.log(0.05/exploration)
-        exp = 0.05 +(exploration-0.05)*np.exp(-k*i)
+def episode(Q_model, target_model,exploration=0.7,size=100,batch_size=50):
+    exp=exploration   
+    for i in tqdm(range(size), desc="Fase exploration = "+str(exp)):
+        exp = exploration - (exploration - 0.05) * (i / size)
         experiences,priority_batch = get_experience(size=batch_size, model=Q_model, exploration=exp)
         random.shuffle(experiences)
         random.shuffle(priority_batch)
@@ -125,6 +125,7 @@ def episode(Q_model, target_model,exploration=0.7,size=100,batch_size=50):
         Q_model.fit(priority_states,priority_targets, epochs=3, verbose=0)
         if i % 10 == 0:  # Update target model periodically
             target_model.set_weights(Q_model.get_weights())
+    Q_model.save("src/upmodel_compact.keras")
     return Q_model, target_model
 
 def train(Q_model):
@@ -140,7 +141,7 @@ def train(Q_model):
 
 def try_model(Q_model):
     flat_weights = flatten_weights(Q_model.trainable_variables)
-    agent = Agent(track, model=Q_model, weights=flat_weights, exploration=0.1, color="green")
+    agent = Agent(track, model=Q_model, weights=flat_weights, exploration=0.0, color="green")
     for i in range(100):
         run_simulation([agent])
 
@@ -197,7 +198,7 @@ def main():
     Q_model.compile(optimizer='adam', 
               loss='mean_squared_error', 
               metrics=['accuracy']) 
-    try_model(Q_model)
+    #try_model(Q_model)
     
     wmodel = train(Q_model)
     wmodel.save("src/defmodel.keras")  # Save using the native Keras format
