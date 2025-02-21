@@ -101,28 +101,30 @@ def get_experience(size, model, exploration):
         priority_batch.extend(priorities)
     return all_experiences,priority_batch
 
-def episode(Q_model, target_model,exploration=0.7,size=100,batch_size=50):
-    exp=exploration   
+def episode(Q_model, target_model,exploration=0.85,size=30 000,batch_size=50):
+    #Priority discarded
+    exp=exploration
+    memory_buffer = []   
     for i in tqdm(range(size), desc="Fase exploration = "+str(exp)):
         exp = exploration - (exploration - 0.05) * (i / size)
-        experiences,priority_batch = get_experience(size=batch_size, model=Q_model, exploration=exp)
-        random.shuffle(experiences)
-        random.shuffle(priority_batch)
+        new_experiences,priority_batch = get_experience(size=batch_size, model=Q_model, exploration=exp)
+        memory_buffer.extend(new_experiences)
         n=len(priority_batch)
-        experiences = experiences+ priority_batch
+        experiences = random.sample(memory_buffer, 64)
         states = np.array([data.state for data in experiences])
         targets = target_model.predict(states, verbose=0) 
         next_states = np.array([data.next_state for data in experiences])
-        next_q_values = target_model.predict(next_states, verbose=0)  
-    
+        next_q_values = Q_model.predict(next_states, verbose=0)  
+        actions_argmax = np.argmax(next_q_values, axis=1)
+        target_next_q= target_model.predict(next_states, verbose=0)
         for idx, data in enumerate(experiences):
-            new_target_max = data.step_reward + DISCOUNT_FACTOR * np.max(next_q_values[idx])
+            new_target_max = data.step_reward + DISCOUNT_FACTOR * target_next_q[idx][actions_argmax[idx]]
             targets[idx][data.action] = new_target_max
     
         Q_model.fit(states, targets, epochs=1, verbose=0)
-        priority_states=states[-n:]
+        """priority_states=states[-n:]
         priority_targets=targets[-n:]
-        Q_model.fit(priority_states,priority_targets, epochs=3, verbose=0)
+        Q_model.fit(priority_states,priority_targets, epochs=3, verbose=0)"""
         if i % 10 == 0:  # Update target model periodically
             target_model.set_weights(Q_model.get_weights())
     Q_model.save("src/upmodel_compact.keras")
@@ -141,8 +143,8 @@ def train(Q_model):
 
 def try_model(Q_model):
     flat_weights = flatten_weights(Q_model.trainable_variables)
-    agent = Agent(track, model=Q_model, weights=flat_weights, exploration=0.0, color="green")
     for i in range(100):
+        agent = Agent(track, model=Q_model, weights=flat_weights, exploration=0.0, color="green")
         run_simulation([agent])
 
 def manual(Q_model):
@@ -198,7 +200,7 @@ def main():
     Q_model.compile(optimizer='adam', 
               loss='mean_squared_error', 
               metrics=['accuracy']) 
-    #try_model(Q_model)
+    try_model(Q_model)
     
     wmodel = train(Q_model)
     wmodel.save("src/defmodel.keras")  # Save using the native Keras format
