@@ -268,13 +268,14 @@ class Agent:
 
     def calculate_step_reward(self):
         #2 * (rewards - min_val) / (max_val - min_val) - 1
-       v=self.speed #0-10
+       v=0.8*self.speed #0-8
 
        fs=self.sensors.numpy()[0][0] #0-1
-       avgs=tf.reduce_mean(self.sensors[0, :3]).numpy() #0-1
-       max=12
+       avgf=2*tf.reduce_mean(self.sensors[0, :3]).numpy() #0-1.5
+       avgs=tf.reduce_mean(self.sensors[0, 2:]).numpy() #0-1
+       max=11.5
        min=0
-       reward=v + fs + avgs
+       reward=v + fs + avgs+avgf
        reward = 2 * (reward - min) / (max - min) - 1
        if self.active:
             if not self.finish:
