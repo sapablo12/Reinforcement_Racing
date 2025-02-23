@@ -16,6 +16,7 @@ DISCOUNT_FACTOR = 0.95
 # Define screen dimensions
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
+SENSOR_LENGTH = 250
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Racing Game Simulation")
 
@@ -87,7 +88,7 @@ def run_simulation(agents):
 
 
 def get_experience(size, model, exploration):
-    run_size=20  
+    run_size=35  
     all_experiences = []
     priority_batch=[]
     num_simulations = -(-size // run_size)  # Ceiling division
@@ -101,7 +102,7 @@ def get_experience(size, model, exploration):
         priority_batch.extend(priorities)
     return all_experiences,priority_batch
 
-def episode(Q_model, target_model,exploration=0.85,size=30 000,batch_size=50):
+def episode(Q_model, target_model,exploration=0.85,size=30000,batch_size=50):
     #Priority discarded
     exp=exploration
     memory_buffer = []   
@@ -110,7 +111,7 @@ def episode(Q_model, target_model,exploration=0.85,size=30 000,batch_size=50):
         new_experiences,priority_batch = get_experience(size=batch_size, model=Q_model, exploration=exp)
         memory_buffer.extend(new_experiences)
         n=len(priority_batch)
-        experiences = random.sample(memory_buffer, 64)
+        experiences = random.sample(memory_buffer, 64) + priority_batch
         states = np.array([data.state for data in experiences])
         targets = target_model.predict(states, verbose=0) 
         next_states = np.array([data.next_state for data in experiences])
@@ -134,10 +135,10 @@ def train(Q_model):
     target_model = clone_model(Q_model)
     target_model.set_weights(Q_model.get_weights())
     Q_model, target_model = episode(Q_model, target_model,0.7)
-    Q_model, target_model = episode(Q_model, target_model,0.7)
+    """Q_model, target_model = episode(Q_model, target_model,0.7)
     Q_model, target_model = episode(Q_model, target_model,0.7)
     Q_model, target_model = episode(Q_model, target_model,0.4)
-    Q_model, target_model = episode(Q_model, target_model,0.2)
+    Q_model, target_model = episode(Q_model, target_model,0.2)"""
    
     return Q_model
 
@@ -200,10 +201,10 @@ def main():
     Q_model.compile(optimizer='adam', 
               loss='mean_squared_error', 
               metrics=['accuracy']) 
-    try_model(Q_model)
+    #try_model(Q_model)
     
     wmodel = train(Q_model)
-    wmodel.save("src/defmodel.keras")  # Save using the native Keras format
+    wmodel.save("src/upmodel_compact.keras")  # Save using the native Keras format
     #try_model(model)
     """while True:
         manual(Q_model) # Updated to native Keras format"""

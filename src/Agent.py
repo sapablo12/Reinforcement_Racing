@@ -6,7 +6,7 @@ import tensorflow as tf
 from tensorflow.keras.models import Model,clone_model  # Import the Model class from Keras
 from tqdm import tqdm  # Add import for tqdm
 from base_model import *  # Import the functions from base_model.py
-
+SENSOR_LENGTH = 250
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 
 # Update Info so state and next_state are tf.Tensor objects
@@ -14,7 +14,7 @@ class Info:
     def __init__(self, state, output, act, step_reward, next_state, done_flag):
         self.state = state          # tf.Tensor of shape (6,)
         self.output = output        # tf.Tensor from model output
-        self.action = act
+        self.action = int(act)
         self.step_reward = step_reward
         self.done_flag = done_flag
         self.next_state = next_state  # tf.Tensor of shape (6,)
@@ -23,7 +23,7 @@ class Agent:
     def __init__(self, track, model: Model,weights,exploration, color="blue"):  # Add type hint for model
         self.track = track
         self.x_initial = 0
-        self.y_initial = 420
+        self.y_initial = 440
         self.x=self.x_initial
         self.y=self.y_initial
         self.displacements = []  # Initialize self.displacements as an empty list
@@ -97,7 +97,7 @@ class Agent:
 
         
     def draw_sensors(self, screen):
-        sensor_length = 100
+        sensor_length = SENSOR_LENGTH
         sensor_angles = np.array([0, -45, 45, -90, 90])  # Front, front-left, front-right, left, right
         sensor_colors = (0, 0, 255)  # blue color for sensors
 
@@ -106,7 +106,7 @@ class Agent:
         for i, angle_offset in enumerate(sensor_angles):
             angle = self.angle + angle_offset
             distance = self.calculate_sensor_distance(angle, sensor_length)
-            new_sensor_values.append(distance / 100)
+            new_sensor_values.append(distance / sensor_length)
 
             # Calculate the end point of the sensor line
             end_x = self.x + distance * np.cos(np.radians(angle))
@@ -116,7 +116,7 @@ class Agent:
         self.sensors.assign(tf.convert_to_tensor([new_sensor_values], dtype=tf.float32))
     
     def update_sensors(self):
-        sensor_length = 100
+        sensor_length = SENSOR_LENGTH
         sensor_angles = np.array([0, -45, 45, -90, 90])  # Front, front-left, front-right, left, right
 
         new_sensor_values = []
@@ -124,7 +124,7 @@ class Agent:
         for i, angle_offset in enumerate(sensor_angles):
             angle = self.angle + angle_offset
             distance = self.calculate_sensor_distance(angle, sensor_length)
-            new_sensor_values.append(distance / 100)
+            new_sensor_values.append(distance / SENSOR_LENGTH)
 
         return tf.convert_to_tensor([new_sensor_values], dtype=tf.float32)
 
@@ -267,19 +267,27 @@ class Agent:
             self.data.append(new_data)
 
     def calculate_step_reward(self):
+        #2 * (rewards - min_val) / (max_val - min_val) - 1
+       v=self.speed #0-10
+
+       fs=self.sensors.numpy()[0][0] #0-1
+       avgs=tf.reduce_mean(self.sensors[0, :3]).numpy() #0-1
+       max=12
+       min=0
+       reward=v + fs + avgs
+       reward = 2 * (reward - min) / (max - min) - 1
        if self.active:
             if not self.finish:
-                    if self.speed < 0.01:
-                        return -10 + 5*self.sensors.numpy()[0][0]
-                    return 2*self.speed + 5*self.sensors.numpy()[0][0] + 5*tf.reduce_mean(self.sensors[0, :3]).numpy()
+                if self.speed < 0.01:
+                    return (-1)
+                return (reward)
             else:
-                    return 2*self.speed + 1000
+                return ( 10)
        else:
             if self.finish:
-                return 2*self.speed+1000
+                return ( 10)
             else:
-                return -1000
-
+                return (-1)
 
     def calculate_mean_speed(self):
         if self.total_time > 0:
