@@ -65,13 +65,10 @@ def run_simulation(agents):
             screen.blit(timer_text, (20, 20))
             #reward_text = timer_font.render(f"Reward: {agents.calculate_step_reward():.2f}", True, (0, 0, 0))
             #screen.blit(reward_text, (SCREEN_WIDTH - reward_text.get_width() - 20, SCREEN_HEIGHT - reward_text.get_height() - 20))
-            if elapsed_seconds >= 120:
+            if elapsed_seconds >= 60:
                 for agent in agents: 
-                    if elapsed_seconds >= 120:
-                        agent.active = False
-                    if agent.speed < 0.01:
-                        agent.active = False
-                agent.check_wall()
+
+                    agent.active = False
             if all(agent.finish or not agent.active for agent in agents):
                 game_active = False
         else:
@@ -102,11 +99,11 @@ def get_experience(size, model, exploration):
         priority_batch.extend(priorities)
     return all_experiences,priority_batch
 
-def episode(Q_model, target_model,exploration=0.85,size=30000,batch_size=50):
+def episode(Q_model, target_model,exploration=0.85,size=10000,batch_size=35):
     #Priority discarded
     exp=exploration
     memory_buffer = []   
-    for i in tqdm(range(size), desc="Fase exploration = "+str(exp)):
+    for i in tqdm(range(30,size), desc="Fase exploration = "+str(exp)):
         exp = exploration - (exploration - 0.05) * (i / size)
         new_experiences,priority_batch = get_experience(size=batch_size, model=Q_model, exploration=exp)
         memory_buffer.extend(new_experiences)
@@ -128,7 +125,7 @@ def episode(Q_model, target_model,exploration=0.85,size=30000,batch_size=50):
         Q_model.fit(priority_states,priority_targets, epochs=3, verbose=0)"""
         if i % 10 == 0:  # Update target model periodically
             target_model.set_weights(Q_model.get_weights())
-    Q_model.save("src/upmodel_compact.keras")
+        Q_model.save("src/upmodel_compact.keras")
     return Q_model, target_model
 
 def train(Q_model):
@@ -201,7 +198,7 @@ def main():
     Q_model.compile(optimizer='adam', 
               loss='mean_squared_error', 
               metrics=['accuracy']) 
-    #try_model(Q_model)
+    try_model(Q_model)
     
     wmodel = train(Q_model)
     wmodel.save("src/upmodel_compact.keras")  # Save using the native Keras format

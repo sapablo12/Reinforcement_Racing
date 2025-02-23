@@ -171,10 +171,7 @@ class Agent:
                 # Update the position of the agent based on speed and angle
                 self.x += self.speed * np.cos(np.radians(self.angle))
                 self.y += self.speed * np.sin(np.radians(self.angle))
-                self.total_distance += self.speed
-                self.total_time += 1
-                new_displacement = (self.x, self.y)
-                self.displacements.append(new_displacement)
+                self.displacements.append((self.x, self.y))
                 if self.x <= 0 or self.x >= SCREEN_WIDTH or self.y <= 0 or self.y >= SCREEN_HEIGHT:
                     self.active = False
                 else:
