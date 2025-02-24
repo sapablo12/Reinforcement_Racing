@@ -101,10 +101,13 @@ def get_experience(size, model, exploration):
 
 def episode(Q_model, target_model,exploration=0.85,size=10000,batch_size=30):
     #Priority discarded
-    exp=exploration
-    memory_buffer = []   
-    for i in tqdm(range(size), desc="Fase exploration = "+str(exp)):
+    memory_buffer = []
+    current=1017   
+    for i in tqdm(range(current,size), desc="Fase exploration = "+str(exploration)):
         exp = exploration - (exploration - 0.05) * (i / size)
+        print("\n"+str(current))
+        print(exp)
+        current+=1
         new_experiences,priority_batch = get_experience(size=batch_size, model=Q_model, exploration=exp)
         memory_buffer.extend(new_experiences)
         n=len(priority_batch)
