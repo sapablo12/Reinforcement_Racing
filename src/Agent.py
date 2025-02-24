@@ -109,9 +109,10 @@ class Agent:
             new_sensor_values.append(distance / sensor_length)
 
             # Calculate the end point of the sensor line
-            end_x = self.x + distance * np.cos(np.radians(angle))
-            end_y = self.y + distance * np.sin(np.radians(angle))
-            pygame.draw.line(screen, sensor_colors, (int(self.x), int(self.y)), (int(end_x), int(end_y)), 2)
+            if self.color == "green":
+                end_x = self.x + distance * np.cos(np.radians(angle))
+                end_y = self.y + distance * np.sin(np.radians(angle))
+                pygame.draw.line(screen, sensor_colors, (int(self.x), int(self.y)), (int(end_x), int(end_y)), 2)
 
         self.sensors.assign(tf.convert_to_tensor([new_sensor_values], dtype=tf.float32))
     

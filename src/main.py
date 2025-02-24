@@ -85,7 +85,7 @@ def run_simulation(agents):
 
 
 def get_experience(size, model, exploration):
-    run_size=35  
+    run_size=30  
     all_experiences = []
     priority_batch=[]
     num_simulations = -(-size // run_size)  # Ceiling division
@@ -99,16 +99,16 @@ def get_experience(size, model, exploration):
         priority_batch.extend(priorities)
     return all_experiences,priority_batch
 
-def episode(Q_model, target_model,exploration=0.85,size=10000,batch_size=35):
+def episode(Q_model, target_model,exploration=0.85,size=10000,batch_size=30):
     #Priority discarded
     exp=exploration
     memory_buffer = []   
-    for i in tqdm(range(30,size), desc="Fase exploration = "+str(exp)):
+    for i in tqdm(range(size), desc="Fase exploration = "+str(exp)):
         exp = exploration - (exploration - 0.05) * (i / size)
         new_experiences,priority_batch = get_experience(size=batch_size, model=Q_model, exploration=exp)
         memory_buffer.extend(new_experiences)
         n=len(priority_batch)
-        experiences = random.sample(memory_buffer, 64) + priority_batch
+        experiences = random.sample(memory_buffer, 128) + priority_batch
         states = np.array([data.state for data in experiences])
         targets = target_model.predict(states, verbose=0) 
         next_states = np.array([data.next_state for data in experiences])
@@ -198,7 +198,7 @@ def main():
     Q_model.compile(optimizer='adam', 
               loss='mean_squared_error', 
               metrics=['accuracy']) 
-    try_model(Q_model)
+    #try_model(Q_model)
     
     wmodel = train(Q_model)
     wmodel.save("src/upmodel_compact.keras")  # Save using the native Keras format
