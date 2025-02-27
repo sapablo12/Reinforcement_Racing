@@ -173,6 +173,7 @@ class Agent:
                 self.x += self.speed * np.cos(np.radians(self.angle))
                 self.y += self.speed * np.sin(np.radians(self.angle))
                 self.displacements.append((self.x, self.y))
+                self.total_distance += self.speed
                 if self.x <= 0 or self.x >= SCREEN_WIDTH or self.y <= 0 or self.y >= SCREEN_HEIGHT:
                     self.active = False
                 else:
@@ -269,15 +270,15 @@ class Agent:
        v=1.2*self.speed #0-12
 
        fs=self.sensors.numpy()[0][0] #0-1
-       avgf=2*tf.reduce_mean(self.sensors[0, :3]).numpy() #0-1.5
+       avgf=2*tf.reduce_mean(self.sensors[0, :3]).numpy() #0-2
        avgs=tf.reduce_mean(self.sensors[0, 2:]).numpy() #0-1
-       max=15.5
+       max=16
        min=0
        reward=v + fs + avgs+avgf
        reward = 2 * (reward - min) / (max - min) - 1
        if self.active:
             if not self.finish:
-                if self.speed < 0.01:
+                if self.speed < 0.8:
                     return (-1)
                 return (reward)
             else:
@@ -304,6 +305,9 @@ class Agent:
         reward = self.calculate_step_reward()
         reward_text = self.font.render(f"Reward: {reward}", True, (0, 0, 0))
         screen.blit(reward_text, (600, 550))
+        
+        speed_text = self.font.render(f"Speed: {self.speed:.2f}", True, (0, 0, 0))
+        screen.blit(speed_text, (600, 570))
 
     def dec_angle(self):
         self.angle -= 2.5

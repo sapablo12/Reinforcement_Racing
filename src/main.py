@@ -77,11 +77,10 @@ def run_simulation(agents):
         pygame.display.flip()
         clock.tick(60)
     experience_batch=[]
-    priority_batch=[]
+    
     for agent in agents: 
-        priority_batch.extend(agent.data[-20:])
         experience_batch.extend(agent.data)    
-    return experience_batch,priority_batch
+    return experience_batch
 
 
 def get_experience(size, model, exploration):
@@ -94,24 +93,23 @@ def get_experience(size, model, exploration):
         current_agents = [Agent(track, model=model, weights=flat_weights, exploration=exploration,
                                 color="green" if i == 0 else "blue")
                           for i in range(run_size)]
-        experiences,priorities = run_simulation(current_agents)
+        experiences = run_simulation(current_agents)
         all_experiences.extend(experiences)
-        priority_batch.extend(priorities)
-    return all_experiences,priority_batch
+    return all_experiences
 
 def episode(Q_model, target_model,exploration=0.85,size=10000,batch_size=30):
     #Priority discarded
     memory_buffer = []
-    current=1821   
+    current=2700   
     for i in tqdm(range(current,size), desc="Fase exploration = "+str(exploration)):
         exp = exploration - (exploration - 0.05) * (i / size)
         print("\n"+str(current))
-        print(exp)
+        print("Exploration: " + str(exp))
         current+=1
-        new_experiences,priority_batch = get_experience(size=batch_size, model=Q_model, exploration=exp)
+        new_experiences = get_experience(size=batch_size, model=Q_model, exploration=exp)
+        print("Experience size: ",len(new_experiences))
         memory_buffer.extend(new_experiences)
-        n=len(priority_batch)
-        experiences = random.sample(memory_buffer, 128) + priority_batch
+        experiences = random.sample(memory_buffer, 256)
         states = np.array([data.state for data in experiences])
         targets = target_model.predict(states, verbose=0) 
         next_states = np.array([data.next_state for data in experiences])
@@ -145,8 +143,9 @@ def train(Q_model):
 def try_model(Q_model):
     flat_weights = flatten_weights(Q_model.trainable_variables)
     for i in range(100):
-        agent = Agent(track, model=Q_model, weights=flat_weights, exploration=0.0, color="green")
+        agent = Agent(track, model=Q_model, weights=flat_weights, exploration=0.4, color="green")
         run_simulation([agent])
+
 
 def manual(Q_model):
     # Initialize the agent
@@ -201,7 +200,8 @@ def main():
     Q_model.compile(optimizer='adam', 
               loss='mean_squared_error', 
               metrics=['accuracy']) 
-    #try_model(Q_model)
+    """"for i in range(100):
+        manual(Q_model)"""
     
     wmodel = train(Q_model)
     wmodel.save("src/upmodel_compact.keras")  # Save using the native Keras format
