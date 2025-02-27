@@ -100,7 +100,7 @@ def get_experience(size, model, exploration):
 def episode(Q_model, target_model,exploration=0.85,size=10000,batch_size=30):
     #Priority discarded
     memory_buffer = []
-    current=2700   
+    current=2895  
     for i in tqdm(range(current,size), desc="Fase exploration = "+str(exploration)):
         exp = exploration - (exploration - 0.05) * (i / size)
         print("\n"+str(current))

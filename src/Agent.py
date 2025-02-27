@@ -269,17 +269,18 @@ class Agent:
         #2 * (rewards - min_val) / (max_val - min_val) - 1
        v=1.2*self.speed #0-12
 
-       fs=self.sensors.numpy()[0][0] #0-1
-       avgf=2*tf.reduce_mean(self.sensors[0, :3]).numpy() #0-2
+       fs=2*self.sensors.numpy()[0][0] #0-2
+       avgf=1.5*tf.reduce_mean(self.sensors[0, 1:3]).numpy() #0-1.5
        avgs=tf.reduce_mean(self.sensors[0, 2:]).numpy() #0-1
-       max=16
+       max=16.5
        min=0
+       
        reward=v + fs + avgs+avgf
        reward = 2 * (reward - min) / (max - min) - 1
        if self.active:
             if not self.finish:
                 if self.speed < 0.8:
-                    return (-1)
+                    reward=reward-0.3
                 return (reward)
             else:
                 return ( 10)
@@ -287,7 +288,7 @@ class Agent:
             if self.finish:
                 return ( 10)
             else:
-                return (-1)
+                return (-5)
 
     def calculate_mean_speed(self):
         if self.total_time > 0:
