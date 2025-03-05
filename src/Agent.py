@@ -269,10 +269,10 @@ class Agent:
         #2 * (rewards - min_val) / (max_val - min_val) - 1
        v=1.2*self.speed #0-12
 
-       fs=2*self.sensors.numpy()[0][0] #0-2
+       fs=3*self.sensors.numpy()[0][0] #0-3
        avgf=1.5*tf.reduce_mean(self.sensors[0, 1:3]).numpy() #0-1.5
        avgs=tf.reduce_mean(self.sensors[0, 2:]).numpy() #0-1
-       max=16.5
+       max=17.5
        min=0
        
        reward=v + fs + avgs+avgf
@@ -319,8 +319,8 @@ class Agent:
 
     def inc_speed(self):
         # Increase speed by 0.5
-        self.speed = min(10, self.speed+0.1)  # Ensure speed doesn't exceed 7.5
+        self.speed = min(10, self.speed+0.15)  # Ensure speed doesn't exceed 7.5
 
     def dec_speed(self):
         # Decrease speed by 0.5, ensuring it doesn't drop below zero
-        self.speed = max(0, self.speed - 0.2)
+        self.speed = max(0, self.speed - 0.25)
