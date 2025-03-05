@@ -27,6 +27,10 @@ class Agent:
         self.x=self.x_initial
         self.y=self.y_initial
         self.displacements = []  # Initialize self.displacements as an empty list
+        self.frame=0
+        self.frame_skip = 2         # Number of frames to skip
+        self.skip_counter = 0       # How many frames left before we pick a new action
+        self.last_action = None
         self.size = 20  # Size of the agent (square)
         self.angle = 0  # Angle the agent is facing (in degrees)
         self.speed = 1  # Movement speed
@@ -156,18 +160,27 @@ class Agent:
     def update(self):
         if self.active:
             if self.model is not None:
+                self.frame += 1
                 # Build state as a (1,6) tensor then squeeze to (6,)
                 state = tf.squeeze(tf.concat([self.sensors, tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
-                output = self.model(tf.expand_dims(state, axis=0))  # model expects batch dimension
-                act = tf.argmax(output, axis=1).numpy()[0]
+                if self.skip_counter == 0:
+                    output = self.model(tf.expand_dims(state, axis=0))  # model expects batch dimension
+                    act = tf.argmax(output, axis=1).numpy()[0]
+                    
+                    if np.random.rand() < self.epsilon:  # Exploration
+                        act = np.random.choice(4)
+                    self.last_action = act
+                    self.skip_counter = self.frame_skip
+                else:
+                # Use the same action as the previous frame
+                    act = self.last_action
+                    self.skip_counter -= 1
                 actions = {
-                        0: self.dec_angle,
-                        1: self.inc_angle,
-                        2: self.inc_speed,
-                        3: self.dec_speed,
-                    }
-                if np.random.rand() < self.epsilon:  # Exploration
-                    act = np.random.choice(4)
+                            0: self.dec_angle,
+                            1: self.inc_angle,
+                            2: self.inc_speed,
+                            3: self.dec_speed,
+                        }    
                 actions.get(act, lambda: None)()
                 # Update the position of the agent based on speed and angle
                 self.x += self.speed * np.cos(np.radians(self.angle))
