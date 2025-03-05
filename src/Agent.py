@@ -31,6 +31,7 @@ class Agent:
         self.frame_skip = 2         # Number of frames to skip
         self.skip_counter = 0       # How many frames left before we pick a new action
         self.last_action = None
+        self.last_output = None
         self.size = 20  # Size of the agent (square)
         self.angle = 0  # Angle the agent is facing (in degrees)
         self.speed = 1  # Movement speed
@@ -170,11 +171,14 @@ class Agent:
                     if np.random.rand() < self.epsilon:  # Exploration
                         act = np.random.choice(4)
                     self.last_action = act
+                    self.last_output = output
                     self.skip_counter = self.frame_skip
+                    valid=True
                 else:
                 # Use the same action as the previous frame
                     act = self.last_action
                     self.skip_counter -= 1
+                    
                 actions = {
                             0: self.dec_angle,
                             1: self.inc_angle,
@@ -195,14 +199,18 @@ class Agent:
                         self.active = False
                     elif color == (255, 0, 0):
                         self.finish = True
-                step_reward = self.calculate_step_reward()
-                next_sensors = self.update_sensors().numpy().tolist()
+
+                if self.skip_counter == 0:
+                    step_reward = self.calculate_step_reward()
+                    next_sensors = self.update_sensors().numpy().tolist()
                 # Build next_state as tensor of shape (6,)
-                next_state = tf.squeeze(tf.concat([tf.convert_to_tensor(next_sensors, dtype=tf.float32), tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
-                done_flag = 1.0 if self.finish else 0.0
+                    next_state = tf.squeeze(tf.concat([tf.convert_to_tensor(next_sensors, dtype=tf.float32), tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
+                    done_flag = 1.0 if self.finish else 0.0
                 # Store tensors directly in Info
-                new_data = Info(state, output, act, step_reward, next_state, done_flag)
-                self.data.append(new_data)
+                    new_data = Info(state, self.last_output, act, step_reward, next_state, done_flag)
+                    self.data.append(new_data)
+
+
                 self.x = np.clip(self.x, 0, SCREEN_WIDTH)
                 self.y = np.clip(self.y, 0, SCREEN_HEIGHT)
         else:
@@ -211,11 +219,6 @@ class Agent:
             self.displacements.append(new_displacement)
             step_reward = self.calculate_step_reward()
             done_flag = 1.0 if self.finish else 0.0
-            if not self.finish:
-                step_reward = -100
-                done_flag = 0.0
-            else:
-                done_flag = 1.0
             output = tf.zeros([1, 2])
             state = tf.squeeze(tf.concat([tf.zeros([1, 5], dtype=tf.float32), tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
             new_data = Info(state, output, np.random.rand(), step_reward, state, done_flag)
