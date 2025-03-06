@@ -28,7 +28,7 @@ class Agent:
         self.y=self.y_initial
         self.displacements = []  # Initialize self.displacements as an empty list
         self.frame=0
-        self.frame_skip = 2         # Number of frames to skip
+        self.frame_skip = 1         # Number of frames to skip
         self.skip_counter = 0       # How many frames left before we pick a new action
         self.last_action = None
         self.last_output = None

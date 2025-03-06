@@ -100,7 +100,7 @@ def get_experience(size, model, exploration):
 def episode(Q_model, target_model,exploration=0.85,size=10000,batch_size=30):
     #Priority discarded
     memory_buffer = []
-    current=2000  
+    current=2000 
     for i in tqdm(range(current,size), desc="Fase exploration = "+str(exploration)):
         exp = exploration - (exploration - 0.05) * (i / size)
         print("\n"+str(current))
@@ -109,7 +109,7 @@ def episode(Q_model, target_model,exploration=0.85,size=10000,batch_size=30):
         new_experiences = get_experience(size=batch_size, model=Q_model, exploration=exp)
         print("Experience size: ",len(new_experiences))
         memory_buffer.extend(new_experiences)
-        experiences = random.sample(memory_buffer, 700)
+        experiences = random.sample(memory_buffer, 1000)
         states = np.array([data.state for data in experiences])
         targets = target_model.predict(states, verbose=0) 
         next_states = np.array([data.next_state for data in experiences])
@@ -126,7 +126,8 @@ def episode(Q_model, target_model,exploration=0.85,size=10000,batch_size=30):
         Q_model.fit(priority_states,priority_targets, epochs=3, verbose=0)"""
         if i % 10 == 0:  # Update target model periodically
             target_model.set_weights(Q_model.get_weights())
-            
+            if i % 100 == 0:
+                memory_buffer = memory_buffer[int(len(memory_buffer) * 0.1):]
         Q_model.save("src/upmodel_compact.keras")
     return Q_model, target_model
 
