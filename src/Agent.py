@@ -23,7 +23,7 @@ class Agent:
     def __init__(self, track, model: Model,weights,exploration, color="blue"):  # Add type hint for model
         self.track = track
         self.x_initial = 0
-        self.y_initial = 440
+        self.y_initial = 480
         self.x=self.x_initial
         self.y=self.y_initial
         self.displacements = []  # Initialize self.displacements as an empty list
@@ -283,13 +283,13 @@ class Agent:
 
     def calculate_step_reward(self):
         #2 * (rewards - min_val) / (max_val - min_val) - 1
-       v=1.2*self.speed #0-12
+       v=self.speed #0-10
 
-       fs=3*self.sensors.numpy()[0][0] #0-3
-       avgf=1.5*tf.reduce_mean(self.sensors[0, 1:3]).numpy() #0-1.5
-       avgs=tf.reduce_mean(self.sensors[0, 2:]).numpy() #0-1
-       max=17.5
-       min=0
+       fs=-3*(1-self.sensors.numpy()[0][0]) #(-3)-0
+       avgf=-1.5*(1-tf.reduce_mean(self.sensors[0, 1:3]).numpy()) #(-1.5)-0
+       avgs=-1*tf.reduce_mean(self.sensors[0, 2:]).numpy() #(-1)-0
+       max=10
+       min=-5.5
        
        reward=v + fs + avgs+avgf
        reward = 2 * (reward - min) / (max - min) - 1
