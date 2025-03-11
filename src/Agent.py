@@ -23,7 +23,7 @@ class Agent:
     def __init__(self, track, model: Model,weights,exploration, color="blue"):  # Add type hint for model
         self.track = track
         self.x_initial = 0
-        self.y_initial = 480
+        self.y_initial = 65
         self.x=self.x_initial
         self.y=self.y_initial
         self.displacements = []  # Initialize self.displacements as an empty list
