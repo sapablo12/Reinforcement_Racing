@@ -134,10 +134,10 @@ def episode(Q_model, target_model,exploration=0.85,size=10000,batch_size=30):
 def train(Q_model):
     target_model = clone_model(Q_model)
     target_model.set_weights(Q_model.get_weights())
-    Q_model, target_model = episode(Q_model, target_model,exploration=0.85,size=200,batch_size=30)
-    Q_model, target_model = episode(Q_model, target_model,exploration=0.85,size=200,batch_size=30)
-    Q_model, target_model = episode(Q_model, target_model,exploration=0.85,size=200,batch_size=30)
-    Q_model, target_model = episode(Q_model, target_model,exploration=0.85,size=200,batch_size=30)
+    Q_model, target_model = episode(Q_model, target_model,exploration=0.85,size=300,batch_size=30)
+    Q_model, target_model = episode(Q_model, target_model,exploration=0.85,size=300,batch_size=30)
+    Q_model, target_model = episode(Q_model, target_model,exploration=0.85,size=300,batch_size=30)
+    Q_model, target_model = episode(Q_model, target_model,exploration=0.85,size=300,batch_size=30)
     """Q_model, target_model = episode(Q_model, target_model,0.7)
     Q_model, target_model = episode(Q_model, target_model,0.7)
     Q_model, target_model = episode(Q_model, target_model,0.4)
@@ -148,7 +148,7 @@ def train(Q_model):
 def try_model(Q_model):
     flat_weights = flatten_weights(Q_model.trainable_variables)
     for i in range(100):
-        agent = Agent(track, model=Q_model, weights=flat_weights, exploration=0.4, color="green")
+        agent = Agent(track, model=Q_model, weights=flat_weights, exploration=0.1, color="green")
         run_simulation([agent])
 
 
@@ -210,7 +210,7 @@ def main():
     
     wmodel = train(Q_model)
     wmodel.save("src/upmodel_compact.keras")  # Save using the native Keras format
-    #try_model(model)
+    try_model(model)
     """while True:
         manual(Q_model) # Updated to native Keras format"""
 if __name__ == "__main__":
