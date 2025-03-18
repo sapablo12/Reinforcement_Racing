@@ -260,7 +260,7 @@ class Agent:
                                                 tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
             done_flag = 1.0 if self.finish else 0.0
             # Store None for model output and action since manual input is used
-            new_data = Info(state, None, None, step_reward, next_state, done_flag)
+            new_data = Info(state, 0, 0, step_reward, next_state, done_flag)
             self.data.append(new_data)
             self.x = np.clip(self.x, 0, SCREEN_WIDTH)
             self.y = np.clip(self.y, 0, SCREEN_HEIGHT)

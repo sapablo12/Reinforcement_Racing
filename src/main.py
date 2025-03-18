@@ -103,11 +103,12 @@ def episode(Q_model, target_model,exploration=0.85,size=10000,batch_size=30):
     current=1
     for i in tqdm(range(current,size), desc="Fase exploration = "+str(exploration)):
         exp = exploration - (exploration - 0.05) * (i / size)
-        print("\n"+str(current))
-        print("Exploration: " + str(exp))
+        #print("\n"+str(current))
+        #print("Exploration: " + str(exp))
         current+=1
         new_experiences = get_experience(size=batch_size, model=Q_model, exploration=exp)
-        print("Experience size: ",len(new_experiences))
+        #
+        # print("Experience size: ",len(new_experiences))
         memory_buffer.extend(new_experiences)
         experiences = random.sample(memory_buffer, 1200)
         states = np.array([data.state for data in experiences])
@@ -121,9 +122,6 @@ def episode(Q_model, target_model,exploration=0.85,size=10000,batch_size=30):
             targets[idx][data.action] = new_target_max
     
         Q_model.fit(states, targets, epochs=1, verbose=0)
-        """priority_states=states[-n:]
-        priority_targets=targets[-n:]
-        Q_model.fit(priority_states,priority_targets, epochs=3, verbose=0)"""
         if i % 10 == 0:  # Update target model periodically
             target_model.set_weights(Q_model.get_weights())
             if i % 100 == 0:
@@ -134,14 +132,10 @@ def episode(Q_model, target_model,exploration=0.85,size=10000,batch_size=30):
 def train(Q_model):
     target_model = clone_model(Q_model)
     target_model.set_weights(Q_model.get_weights())
-    Q_model, target_model = episode(Q_model, target_model,exploration=0.85,size=300,batch_size=30)
-    Q_model, target_model = episode(Q_model, target_model,exploration=0.85,size=300,batch_size=30)
-    Q_model, target_model = episode(Q_model, target_model,exploration=0.85,size=300,batch_size=30)
-    Q_model, target_model = episode(Q_model, target_model,exploration=0.85,size=300,batch_size=30)
-    """Q_model, target_model = episode(Q_model, target_model,0.7)
-    Q_model, target_model = episode(Q_model, target_model,0.7)
-    Q_model, target_model = episode(Q_model, target_model,0.4)
-    Q_model, target_model = episode(Q_model, target_model,0.2)"""
+    Q_model, target_model = episode(Q_model, target_model,exploration=0.6,size=1000,batch_size=30)
+    Q_model, target_model = episode(Q_model, target_model,exploration=0.6,size=1000,batch_size=30)
+    Q_model, target_model = episode(Q_model, target_model,exploration=0.6,size=800,batch_size=30)
+    Q_model, target_model = episode(Q_model, target_model,exploration=0.6,size=800,batch_size=30)
    
     return Q_model
 
@@ -205,12 +199,10 @@ def main():
     Q_model.compile(optimizer='adam', 
               loss='mean_squared_error', 
               metrics=['accuracy']) 
-    """"for i in range(100):
-        manual(Q_model)"""
-    
+    #try_model(model)
     wmodel = train(Q_model)
     wmodel.save("src/upmodel_compact.keras")  # Save using the native Keras format
-    try_model(model)
+    
     """while True:
         manual(Q_model) # Updated to native Keras format"""
 if __name__ == "__main__":
