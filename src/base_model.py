@@ -1,52 +1,50 @@
 import tensorflow as tf
-from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
-import numpy as np
+from tensorflow.keras.models import Sequential
 
-# Initialize weights in a normal distribution
-initializer = tf.keras.initializers.RandomNormal(mean=0., stddev=1.)
+
+initializer = tf.keras.initializers.RandomNormal(mean=0.0, stddev=1.0)
 
 model = Sequential()
-    
-model.add(Dense(32, input_dim=6, activation='relu', kernel_initializer=initializer))
-model.add(Dense(32, activation='relu', kernel_initializer=initializer))
+model.add(Dense(32, input_dim=6, activation="relu", kernel_initializer=initializer))
+model.add(Dense(32, activation="relu", kernel_initializer=initializer))
 model.add(Dense(4, activation=None, kernel_initializer=initializer))
+model.compile(optimizer="adam", loss="mean_squared_error", metrics=["accuracy"])
 
-model.compile(optimizer='adam', loss='mean_squared_error', metrics=['accuracy'])
 
 def flatten_weights(weights):
-        flat_weights=tf.concat([tf.reshape(w, [-1]) for w in weights], axis=0)
-        return flat_weights.numpy()
+    flat_weights = tf.concat([tf.reshape(w, [-1]) for w in weights], axis=0)
+    return flat_weights.numpy()
+
 
 def assign_weights(model, flat_weights):
-    #flat_weights is np array
     flat_weights = tf.constant(flat_weights)
     reshaped_weights = []
     start = 0
     for var in model.trainable_variables:
         shape = var.shape
         size = tf.size(var).numpy()
-        reshaped_weights.append(tf.reshape(flat_weights[start:start + size], shape))
+        reshaped_weights.append(tf.reshape(flat_weights[start : start + size], shape))
         start += size
 
-    # Assign the new weights to the model
     for var, new_weight in zip(model.trainable_variables, reshaped_weights):
         var.assign(new_weight)
 
 
-def compare_models(model1, model2):
+def compare_models(model1, model2, verbose=True):
     weights1 = flatten_weights(model1.trainable_variables)
     weights2 = flatten_weights(model2.trainable_variables)
-    print(weights1)
-    print(weights2)
     if len(weights1) != len(weights2):
+        if verbose:
+            print("Different flattened sizes:", len(weights1), len(weights2))
         return False
-    j=0
+
+    diff_count = 0
     for w1, w2 in zip(weights1, weights2):
-        if w1!=w2:
-            j=j+1
-    
-    return j
+        if w1 != w2:
+            diff_count += 1
 
+    if verbose:
+        print("Different weights:", diff_count)
 
-model.save("src/upmodel_compact.keras")
+    return diff_count

@@ -1,0 +1,7 @@
+numpy>=1.26,<3
+pygame>=2.5,<3
+tensorflow>=2.16,<2.19
+tqdm>=4.66,<5
+Pillow>=10,<12
+python-dotenv>=1.0,<2
+matplotlib>=3.8,<4

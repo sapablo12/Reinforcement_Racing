@@ -1,74 +1,75 @@
 import pygame
-import sys
-import math
-import numpy as np  # Added import for NumPy
+import numpy as np
 import tensorflow as tf
-from tensorflow.keras.models import Model,clone_model  # Import the Model class from Keras
-from tqdm import tqdm  # Add import for tqdm
-from base_model import *  # Import the functions from base_model.py
+from tensorflow.keras.models import Model, clone_model
+
+from base_model import assign_weights
+
 SENSOR_LENGTH = 250
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 
-# Update Info so state and next_state are tf.Tensor objects
+
 class Info:
     def __init__(self, state, output, act, step_reward, next_state, done_flag):
-        self.state = state          # tf.Tensor of shape (6,)
-        self.output = output        # tf.Tensor from model output
+        self.state = state
+        self.output = output
         self.action = int(act)
         self.step_reward = step_reward
         self.done_flag = done_flag
-        self.next_state = next_state  # tf.Tensor of shape (6,)
+        self.next_state = next_state
+
 
 class Agent:
-    def __init__(self, track, model: Model,weights,exploration, color="blue"):  # Add type hint for model
+    def __init__(self, track, model: Model, weights, exploration, color="blue"):
         self.track = track
         self.x_initial = 0
         self.y_initial = 65
-        self.x=self.x_initial
-        self.y=self.y_initial
-        self.displacements = []  # Initialize self.displacements as an empty list
-        self.frame=0
-        self.frame_skip = 1         # Number of frames to skip
-        self.skip_counter = 0       # How many frames left before we pick a new action
+        self.x = self.x_initial
+        self.y = self.y_initial
+        self.displacements = []
+        self.frame = 0
+        self.frame_skip = 1
+        self.skip_counter = 0
         self.last_action = None
         self.last_output = None
-        self.size = 20  # Size of the agent (square)
-        self.angle = 0  # Angle the agent is facing (in degrees)
-        self.speed = 1  # Movement speed
-        self.sensors = tf.Variable(tf.zeros([1, 5]), dtype=tf.float32)  # Distance values for the 5 sensors as a tensor
+        self.size = 20
+        self.angle = 0
+        self.speed = 1
+        self.sensors = tf.Variable(tf.zeros([1, 5]), dtype=tf.float32)
         self.finish = False
-        self.active = True  # Flag to check if agent is active
+        self.active = True
         self.model: Model = clone_model(model)
-        self.epsilon=exploration
-        assign_weights(model=self.model,flat_weights=weights)  # Explicitly declare the type of self.model
-        self.total_distance = 0  # Total distance traveled by the agent
-        self.total_time = 0  # Total time the agent has been active
-        self.reward=0
-        self.font = pygame.font.Font(None, 24)  # Font for displaying sensor values
-        self.data = []  # Initialize self.data as an empty list
-        self.color = color  # New attribute affecting agent color
-        # Initialize manual controls for continuous user input
+        self.epsilon = exploration
+        assign_weights(model=self.model, flat_weights=weights)
+        self.total_distance = 0
+        self.total_time = 0
+        self.reward = 0
+        self.font = pygame.font.Font(None, 24)
+        self.data = []
+        self.color = color
+
+    @staticmethod
+    def _rgb(color):
+        return (color[0], color[1], color[2])
+
     def draw(self, screen):
-        # Draw the agent as a square
         half_size = self.size / 2
         points = [
             (self.x - half_size, self.y - half_size),
             (self.x + half_size, self.y - half_size),
             (self.x + half_size, self.y + half_size),
-            (self.x - half_size, self.y + half_size)
+            (self.x - half_size, self.y + half_size),
         ]
         rotated_points = [self.rotate_point(px, py, self.angle) for px, py in points]
-        rotated_points = [(int(px), int(py)) for px, py in rotated_points]  # Ensure points are number pairs
-        pygame.draw.polygon(screen, (0, 0, 255) if self.color=="blue" else (0,255,0), rotated_points)
+        rotated_points = [(int(px), int(py)) for px, py in rotated_points]
+        pygame.draw.polygon(screen, (0, 0, 255) if self.color == "blue" else (0, 255, 0), rotated_points)
 
-        # Draw sensors
         self.draw_sensors(screen)
         if self.color == "green":
             self.display_sensor_values(screen)
             self.display_reward(screen)
 
     def rotate_point(self, px, py, angle):
-        # Rotate a point around the agent's center using NumPy
         rad_angle = np.radians(angle)
         sin_a = np.sin(rad_angle)
         cos_a = np.cos(rad_angle)
@@ -77,158 +78,126 @@ class Agent:
         x_new = x_shifted * cos_a - y_shifted * sin_a + cx
         y_new = x_shifted * sin_a + y_shifted * cos_a + cy
         return (x_new, y_new)
-    
+
     def check_wall(self):
-        # Check if the agent has hit a wall (black pixel)
         if 0 <= self.x < SCREEN_WIDTH and 0 <= self.y < SCREEN_HEIGHT:
-            color = self.track.get_at((int(self.x), int(self.y)))
-            if color == (0, 0, 0) :  # Black  or green color indicates a wall
+            color = self._rgb(self.track.get_at((int(self.x), int(self.y))))
+            if color == (0, 0, 0):
                 self.active = False
 
-    def dispersion(self,a):
-        # Calculate the sum of the distance from the last three displacements
-        if len(self.displacements) < a:
-            return 0  # Not enough displacements to calculate
-        distances=0.0
-        last_displacements = self.displacements[-a:]
-        for i in range(0, a, 5):
-            distances += np.linalg.norm(np.array(last_displacements[i]) - np.array([self.x, self.y]))
-
-        
-        """for i in range(a):
-            distances += np.linalg.norm(np.array(last_displacements[i]) - np.array([self.x, self.y]))
-        """
-        return distances
-
-        
     def draw_sensors(self, screen):
-        sensor_length = SENSOR_LENGTH
-        sensor_angles = np.array([0, -45, 45, -90, 90])  # Front, front-left, front-right, left, right
-        sensor_colors = (0, 0, 255)  # blue color for sensors
+        sensor_angles = np.array([0, -45, 45, -90, 90])
+        sensor_colors = (0, 0, 255)
 
         new_sensor_values = []
-
-        for i, angle_offset in enumerate(sensor_angles):
+        for angle_offset in sensor_angles:
             angle = self.angle + angle_offset
-            distance = self.calculate_sensor_distance(angle, sensor_length)
-            new_sensor_values.append(distance / sensor_length)
+            distance = self.calculate_sensor_distance(angle, SENSOR_LENGTH)
+            new_sensor_values.append(distance / SENSOR_LENGTH)
 
-            # Calculate the end point of the sensor line
             if self.color == "green":
                 end_x = self.x + distance * np.cos(np.radians(angle))
                 end_y = self.y + distance * np.sin(np.radians(angle))
                 pygame.draw.line(screen, sensor_colors, (int(self.x), int(self.y)), (int(end_x), int(end_y)), 2)
 
         self.sensors.assign(tf.convert_to_tensor([new_sensor_values], dtype=tf.float32))
-    
-    def update_sensors(self):
-        sensor_length = SENSOR_LENGTH
-        sensor_angles = np.array([0, -45, 45, -90, 90])  # Front, front-left, front-right, left, right
 
+    def update_sensors(self):
+        sensor_angles = np.array([0, -45, 45, -90, 90])
         new_sensor_values = []
 
-        for i, angle_offset in enumerate(sensor_angles):
+        for angle_offset in sensor_angles:
             angle = self.angle + angle_offset
-            distance = self.calculate_sensor_distance(angle, sensor_length)
+            distance = self.calculate_sensor_distance(angle, SENSOR_LENGTH)
             new_sensor_values.append(distance / SENSOR_LENGTH)
 
         return tf.convert_to_tensor([new_sensor_values], dtype=tf.float32)
 
-
     def calculate_sensor_distance(self, angle, max_length):
-        # Calculate the distance from the agent to the point where the sensor meets a black wall
-        for distance in np.arange(0, max_length, 1):  # Decrease step size for higher resolution
+        for distance in range(max_length):
             sensor_x = self.x + distance * np.cos(np.radians(angle))
             sensor_y = self.y + distance * np.sin(np.radians(angle))
-            
-            # Check if the sensor point is within bounds
+
             if 0 <= sensor_x < SCREEN_WIDTH and 0 <= sensor_y < SCREEN_HEIGHT:
-                # Get the color of the pixel at the sensor point
-                color = self.track.get_at((int(sensor_x), int(sensor_y)))
-                if color == (0, 0, 0):  # Black color indicates a wall
+                rgb_color = self._rgb(self.track.get_at((int(sensor_x), int(sensor_y))))
+                if rgb_color == (0, 0, 0):
                     if distance == 0:
                         self.active = False
                     return distance
-                elif color == (255, 0, 0):  # Red color indicates a finish line
+                if rgb_color == (255, 0, 0):
                     if distance == 0:
                         self.finish = True
                     return distance
             else:
-                 # Sensor is out of bounds
                 return distance
         return max_length
-    
+
     def update(self):
-        if self.active:
-            if self.model is not None:
-                self.frame += 1
-                # Build state as a (1,6) tensor then squeeze to (6,)
-                state = tf.squeeze(tf.concat([self.sensors, tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
-                if self.skip_counter == 0:
-                    output = self.model(tf.expand_dims(state, axis=0))  # model expects batch dimension
-                    act = tf.argmax(output, axis=1).numpy()[0]
-                    
-                    if np.random.rand() < self.epsilon:  # Exploration
-                        act = np.random.choice(4)
-                    self.last_action = act
-                    self.last_output = output
-                    self.skip_counter = self.frame_skip
-                    valid=True
-                else:
-                # Use the same action as the previous frame
-                    act = self.last_action
-                    self.skip_counter -= 1
-                    
-                actions = {
-                            0: self.dec_angle,
-                            1: self.inc_angle,
-                            2: self.inc_speed,
-                            3: self.dec_speed,
-                        }    
-                actions.get(act, lambda: None)()
-                # Update the position of the agent based on speed and angle
-                self.x += self.speed * np.cos(np.radians(self.angle))
-                self.y += self.speed * np.sin(np.radians(self.angle))
-                self.displacements.append((self.x, self.y))
-                self.total_distance += self.speed
-                if self.x <= 0 or self.x >= SCREEN_WIDTH or self.y <= 0 or self.y >= SCREEN_HEIGHT:
+        if self.active and self.model is not None:
+            self.sensors.assign(self.update_sensors())
+            self.frame += 1
+            state = tf.squeeze(tf.concat([self.sensors, tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
+
+            if self.skip_counter == 0:
+                output = self.model(tf.expand_dims(state, axis=0))
+                act = tf.argmax(output, axis=1).numpy()[0]
+                if np.random.rand() < self.epsilon:
+                    act = np.random.choice(4)
+                self.last_action = act
+                self.last_output = output
+                self.skip_counter = self.frame_skip
+            else:
+                act = self.last_action
+                self.skip_counter -= 1
+
+            actions = {
+                0: self.dec_angle,
+                1: self.inc_angle,
+                2: self.inc_speed,
+                3: self.dec_speed,
+            }
+            actions.get(act, lambda: None)()
+
+            self.x += self.speed * np.cos(np.radians(self.angle))
+            self.y += self.speed * np.sin(np.radians(self.angle))
+            self.displacements.append((self.x, self.y))
+            self.total_distance += self.speed
+
+            if self.x <= 0 or self.x >= SCREEN_WIDTH or self.y <= 0 or self.y >= SCREEN_HEIGHT:
+                self.active = False
+            else:
+                color = self._rgb(self.track.get_at((int(self.x), int(self.y))))
+                if color == (0, 0, 0):
                     self.active = False
-                else:
-                    color = self.track.get_at((int(self.x), int(self.y)))
-                    if color == (0, 0, 0):
-                        self.active = False
-                    elif color == (255, 0, 0):
-                        self.finish = True
+                elif color == (255, 0, 0):
+                    self.finish = True
 
-                if self.skip_counter == 0:
-                    step_reward = self.calculate_step_reward()
-                    next_sensors = self.update_sensors().numpy().tolist()
-                # Build next_state as tensor of shape (6,)
-                    next_state = tf.squeeze(tf.concat([tf.convert_to_tensor(next_sensors, dtype=tf.float32), tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
-                    done_flag = 1.0 if self.finish else 0.0
-                # Store tensors directly in Info
-                    new_data = Info(state, self.last_output, act, step_reward, next_state, done_flag)
-                    self.data.append(new_data)
+            if self.skip_counter == 0:
+                step_reward = self.calculate_step_reward()
+                next_sensors = self.update_sensors().numpy().tolist()
+                next_state = tf.squeeze(
+                    tf.concat([tf.convert_to_tensor(next_sensors, dtype=tf.float32), tf.constant([[self.speed / 10.0]])], axis=1),
+                    axis=0,
+                )
+                done_flag = 1.0 if (self.finish or not self.active) else 0.0
+                self.data.append(Info(state, self.last_output, act, step_reward, next_state, done_flag))
 
+            self.x = np.clip(self.x, 0, SCREEN_WIDTH)
+            self.y = np.clip(self.y, 0, SCREEN_HEIGHT)
+            return
 
-                self.x = np.clip(self.x, 0, SCREEN_WIDTH)
-                self.y = np.clip(self.y, 0, SCREEN_HEIGHT)
-        else:
-            # In inactive branch, build a dummy state tensor of shape (6,)
-            new_displacement = (self.x, self.y)
-            self.displacements.append(new_displacement)
-            step_reward = self.calculate_step_reward()
-            done_flag = 1.0 if self.finish else 0.0
-            output = tf.zeros([1, 2])
-            state = tf.squeeze(tf.concat([tf.zeros([1, 5], dtype=tf.float32), tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
-            new_data = Info(state, output, np.random.rand(), step_reward, state, done_flag)
-            self.data.append(new_data)
+        new_displacement = (self.x, self.y)
+        self.displacements.append(new_displacement)
+        step_reward = self.calculate_step_reward()
+        done_flag = 1.0 if (self.finish or not self.active) else 0.0
+        output = tf.zeros([1, 4])
+        state = tf.squeeze(tf.concat([tf.zeros([1, 5], dtype=tf.float32), tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
+        self.data.append(Info(state, output, 0, step_reward, state, done_flag))
 
     def update2(self):
         if self.active:
-            # Build state as a (1,6) tensor then squeeze to (6,)
+            self.sensors.assign(self.update_sensors())
             state = tf.squeeze(tf.concat([self.sensors, tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
-            # Use WASD for manual control
             keys = pygame.key.get_pressed()
             if keys[pygame.K_a]:
                 self.dec_angle()
@@ -238,77 +207,68 @@ class Agent:
                 self.inc_speed()
             if keys[pygame.K_s]:
                 self.dec_speed()
-            # Update position based on manual inputs
+
             self.x += self.speed * np.cos(np.radians(self.angle))
             self.y += self.speed * np.sin(np.radians(self.angle))
             self.total_distance += self.speed
             self.total_time += 1
-            new_displacement = (self.x, self.y)
-            self.displacements.append(new_displacement)
+            self.displacements.append((self.x, self.y))
+
             if self.x <= 0 or self.x >= SCREEN_WIDTH or self.y <= 0 or self.y >= SCREEN_HEIGHT:
                 self.active = False
             else:
-                color = self.track.get_at((int(self.x), int(self.y)))
+                color = self._rgb(self.track.get_at((int(self.x), int(self.y))))
                 if color == (0, 0, 0):
                     self.active = False
                 elif color == (255, 0, 0):
                     self.finish = True
+
             step_reward = self.calculate_step_reward()
             next_sensors = self.update_sensors().numpy().tolist()
-            # Build next_state as tensor of shape (6,)
-            next_state = tf.squeeze(tf.concat([tf.convert_to_tensor(next_sensors, dtype=tf.float32),
-                                                tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
+            next_state = tf.squeeze(
+                tf.concat([tf.convert_to_tensor(next_sensors, dtype=tf.float32), tf.constant([[self.speed / 10.0]])], axis=1),
+                axis=0,
+            )
             done_flag = 1.0 if self.finish else 0.0
-            # Store None for model output and action since manual input is used
-            new_data = Info(state, 0, 0, step_reward, next_state, done_flag)
-            self.data.append(new_data)
+            self.data.append(Info(state, 0, 0, step_reward, next_state, done_flag))
             self.x = np.clip(self.x, 0, SCREEN_WIDTH)
             self.y = np.clip(self.y, 0, SCREEN_HEIGHT)
-        else:
-            # In inactive branch, build a dummy state tensor of shape (6,)
-            new_displacement = (self.x, self.y)
-            self.displacements.append(new_displacement)
-            step_reward = self.calculate_step_reward()
-            done_flag = 1.0 if self.finish else 0.0
-            if not self.finish:
-                step_reward = -100
-                done_flag = 0.0
-            else:
-                done_flag = 1.0
-            output = tf.zeros([1, 2])
-            state = tf.squeeze(tf.concat([tf.zeros([1, 5], dtype=tf.float32),
-                                           tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
-            new_data = Info(state, output, None, step_reward, state, done_flag)
-            self.data.append(new_data)
+            return
+
+        self.displacements.append((self.x, self.y))
+        step_reward = self.calculate_step_reward()
+        done_flag = 1.0 if self.finish else 0.0
+        if not self.finish:
+            step_reward = -100
+            done_flag = 0.0
+        output = tf.zeros([1, 4])
+        state = tf.squeeze(tf.concat([tf.zeros([1, 5], dtype=tf.float32), tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
+        self.data.append(Info(state, output, 0, step_reward, state, done_flag))
 
     def calculate_step_reward(self):
-        #2 * (rewards - min_val) / (max_val - min_val) - 1
-       v=self.speed #0-10
+        v = self.speed
+        fs = -3 * (1 - self.sensors.numpy()[0][0])
+        avgf = -1.5 * (1 - tf.reduce_mean(self.sensors[0, 1:3]).numpy())
+        avgs = -1 * tf.reduce_mean(self.sensors[0, 2:]).numpy()
+        max_reward = 10
+        min_reward = -5.5
 
-       fs=-3*(1-self.sensors.numpy()[0][0]) #(-3)-0
-       avgf=-1.5*(1-tf.reduce_mean(self.sensors[0, 1:3]).numpy()) #(-1.5)-0
-       avgs=-1*tf.reduce_mean(self.sensors[0, 2:]).numpy() #(-1)-0
-       max=10
-       min=-5.5
-       
-       reward=v + fs + avgs+avgf
-       reward = 2 * (reward - min) / (max - min) - 1
-       if self.active:
+        reward = v + fs + avgs + avgf
+        reward = 2 * (reward - min_reward) / (max_reward - min_reward) - 1
+
+        if self.active:
             if not self.finish:
                 if self.speed < 0.8:
-                    reward=reward-0.3
-                return (reward)
-            else:
-                return ( 10)
-       else:
-            if self.finish:
-                return ( 10)
-            else:
-                return (-5)
+                    reward = reward - 0.3
+                return reward
+            return 10
+
+        if self.finish:
+            return 10
+        return -5
 
     def calculate_mean_speed(self):
         if self.total_time > 0:
-            
             return self.total_distance / self.total_time
         return 0
 
@@ -322,7 +282,7 @@ class Agent:
         reward = self.calculate_step_reward()
         reward_text = self.font.render(f"Reward: {reward}", True, (0, 0, 0))
         screen.blit(reward_text, (600, 550))
-        
+
         speed_text = self.font.render(f"Speed: {self.speed:.2f}", True, (0, 0, 0))
         screen.blit(speed_text, (600, 570))
 
@@ -330,13 +290,10 @@ class Agent:
         self.angle -= 2.5
 
     def inc_angle(self):
-        # Turn right: increase angle by 5 degrees
         self.angle += 2.5
 
     def inc_speed(self):
-        # Increase speed by 0.5
-        self.speed = min(10, self.speed+0.15)  # Ensure speed doesn't exceed 7.5
+        self.speed = min(10, self.speed + 0.15)
 
     def dec_speed(self):
-        # Decrease speed by 0.5, ensuring it doesn't drop below zero
         self.speed = max(0, self.speed - 0.25)

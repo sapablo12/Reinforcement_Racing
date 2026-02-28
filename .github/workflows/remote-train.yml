@@ -1,0 +1,84 @@
+name: remote-train
+
+on:
+  workflow_dispatch:
+    inputs:
+      headless:
+        description: "Run without display"
+        type: boolean
+        required: true
+        default: true
+      rounds:
+        description: "Training rounds"
+        type: number
+        required: true
+        default: 4
+      episode_size:
+        description: "Steps per round"
+        type: number
+        required: true
+        default: 800
+      batch_size:
+        description: "Agents per batch request"
+        type: number
+        required: true
+        default: 30
+      exploration:
+        description: "Initial epsilon"
+        type: string
+        required: true
+        default: "0.6"
+      seed:
+        description: "Random seed"
+        type: number
+        required: true
+        default: 42
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ensure initial model file exists
+        run: |
+          python -c "import os,sys; sys.path.append('src'); from base_model import model; os.makedirs('models', exist_ok=True); model.save('models/upmodel_compact.keras') if not os.path.exists('models/upmodel_compact.keras') else None"
+
+      - name: Run training
+        shell: bash
+        run: |
+          HEADLESS_FLAG=""
+          if [ "${{ inputs.headless }}" = "true" ]; then
+            HEADLESS_FLAG="--headless"
+          fi
+
+          python src/main.py \
+            --mode train \
+            ${HEADLESS_FLAG} \
+            --rounds ${{ inputs.rounds }} \
+            --episode-size ${{ inputs.episode_size }} \
+            --batch-size ${{ inputs.batch_size }} \
+            --exploration ${{ inputs.exploration }} \
+            --seed ${{ inputs.seed }}
+
+      - name: Upload trained model
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model-${{ github.run_id }}
+          path: models/upmodel_compact.keras
+          if-no-files-found: error
+

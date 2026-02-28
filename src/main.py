@@ -1,184 +1,225 @@
+import argparse
 import os
-import sys
-import math
-from Agent import Agent
+import random
+
+import numpy as np
 import pygame
 import tensorflow as tf
-from tensorflow.keras.models import load_model, Model, clone_model
-import numpy as np
-from tqdm import tqdm  # Add import for tqdm
-from base_model import *
-import random
-#// vscode-fold=#
-# Initialize Pygame
-pygame.init()
+from tensorflow.keras.models import clone_model, load_model
+from tqdm import tqdm
+
+from Agent import Agent
+from base_model import flatten_weights, model as default_model
+
 DISCOUNT_FACTOR = 0.95
-# Define screen dimensions
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
-SENSOR_LENGTH = 250
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("Racing Game Simulation")
+MODEL_PATH = "models/upmodel_compact.keras"
+
+
+def init_pygame(headless: bool):
+    if headless:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    pygame.init()
+
 
 def load_track():
-    folder_path = os.path.join(os.path.dirname(__file__), 'current_track')
-    file_path = os.path.join(folder_path, 'track.png')
-    if os.path.exists(file_path):
-        return pygame.image.load(file_path)
+    folder_path = os.path.join(os.path.dirname(__file__), "current_track")
+    file_path = os.path.join(folder_path, "track.png")
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Track image not found at {file_path}")
+    return pygame.image.load(file_path)
+
+
+def save_model(model_to_save, path=MODEL_PATH):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    model_to_save.save(path)
+
+
+def run_simulation(agents, track, render=True, max_steps=1800, fps=60):
+    if render:
+        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        pygame.display.set_caption("Racing Game Simulation")
+        timer_font = pygame.font.Font(None, 36)
+        clock = pygame.time.Clock()
     else:
-        print("No track found in the current_track folder.")
-        return None
+        screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        timer_font = None
+        clock = None
 
-track = load_track()
-
-
-def save_model(model):
-    model.save("src/upmodel_compact.keras")
-    print("Model saved to src/upmodel_compact.keras")
-
-def run_simulation(agents):
     running = True
-    clock = pygame.time.Clock()
-    start_ticks = pygame.time.get_ticks()
-    timer_font = pygame.font.Font(None, 36)
     game_active = True
-    elapsed_seconds = 0
+    steps = 0
 
     while running:
-        screen.fill((255, 255, 255))
-        if track:
+        if render:
+            screen.fill((255, 255, 255))
             screen.blit(track, (0, 0))
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            # Check for S key press to save the model
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_s:
-                save_model(agents[0].model)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_s:
+                    save_model(agents[0].model)
+        else:
+            pygame.event.pump()
 
         if game_active:
             for agent in agents:
                 agent.update()
-                agent.draw(screen)
+                if render:
+                    agent.draw(screen)
 
-            elapsed_seconds = (pygame.time.get_ticks() - start_ticks) / 1000
-            timer_text = timer_font.render(f"Time: {elapsed_seconds:.2f} s", True, (0, 0, 0))
-            screen.blit(timer_text, (20, 20))
-            #reward_text = timer_font.render(f"Reward: {agents.calculate_step_reward():.2f}", True, (0, 0, 0))
-            #screen.blit(reward_text, (SCREEN_WIDTH - reward_text.get_width() - 20, SCREEN_HEIGHT - reward_text.get_height() - 20))
-            if elapsed_seconds >= 60:
-                for agent in agents: 
+            steps += 1
+            if render:
+                elapsed_seconds = steps / float(fps)
+                timer_text = timer_font.render(f"Time: {elapsed_seconds:.2f} s", True, (0, 0, 0))
+                screen.blit(timer_text, (20, 20))
 
+            if steps >= max_steps:
+                for agent in agents:
                     agent.active = False
+
             if all(agent.finish or not agent.active for agent in agents):
                 game_active = False
         else:
             running = False
 
-        pygame.display.flip()
-        clock.tick(60)
-    experience_batch=[]
-    
-    for agent in agents: 
-        experience_batch.extend(agent.data)    
+        if render:
+            pygame.display.flip()
+            clock.tick(fps)
+
+    experience_batch = []
+    for agent in agents:
+        experience_batch.extend(agent.data)
     return experience_batch
 
 
-def get_experience(size, model, exploration):
-    run_size=30  
+def get_experience(size, q_model, track, exploration, render=False):
+    run_size = min(30, size)
     all_experiences = []
-    priority_batch=[]
-    num_simulations = -(-size // run_size)  # Ceiling division
+    num_simulations = -(-size // run_size)
+
     for _ in range(num_simulations):
-        flat_weights = flatten_weights(model.trainable_variables)
-        current_agents = [Agent(track, model=model, weights=flat_weights, exploration=exploration,
-                                color="green" if i == 0 else "blue")
-                          for i in range(run_size)]
-        experiences = run_simulation(current_agents)
-        all_experiences.extend(experiences)
+        flat_weights = flatten_weights(q_model.trainable_variables)
+        current_agents = [
+            Agent(
+                track,
+                model=q_model,
+                weights=flat_weights,
+                exploration=exploration,
+                color="green" if (render and i == 0) else "blue",
+            )
+            for i in range(run_size)
+        ]
+        all_experiences.extend(run_simulation(current_agents, track=track, render=render))
+
     return all_experiences
 
-def episode(Q_model, target_model,exploration=0.85,size=10000,batch_size=30):
-    #Priority discarded
+
+def episode(q_model, target_model, track, exploration=0.85, size=1000, batch_size=30, render=False):
     memory_buffer = []
-    current=1
-    for i in tqdm(range(current,size), desc="Fase exploration = "+str(exploration)):
+    min_replay_sample = 256
+    replay_sample = 1200
+
+    for i in tqdm(range(1, size + 1), desc=f"Exploration={exploration:.2f}"):
         exp = exploration - (exploration - 0.05) * (i / size)
-        #print("\n"+str(current))
-        #print("Exploration: " + str(exp))
-        current+=1
-        new_experiences = get_experience(size=batch_size, model=Q_model, exploration=exp)
-        #
-        # print("Experience size: ",len(new_experiences))
-        memory_buffer.extend(new_experiences)
-        experiences = random.sample(memory_buffer, 1200)
-        states = np.array([data.state for data in experiences])
-        targets = target_model.predict(states, verbose=0) 
-        next_states = np.array([data.next_state for data in experiences])
-        next_q_values = Q_model.predict(next_states, verbose=0)  
+        memory_buffer.extend(get_experience(size=batch_size, q_model=q_model, track=track, exploration=exp, render=render))
+
+        current_sample_size = min(len(memory_buffer), replay_sample)
+        if current_sample_size < min_replay_sample:
+            continue
+
+        experiences = random.sample(memory_buffer, current_sample_size)
+        states = np.array([data.state for data in experiences], dtype=np.float32)
+        next_states = np.array([data.next_state for data in experiences], dtype=np.float32)
+
+        targets = target_model.predict(states, verbose=0)
+        next_q_values = q_model.predict(next_states, verbose=0)
         actions_argmax = np.argmax(next_q_values, axis=1)
-        target_next_q= target_model.predict(next_states, verbose=0)
+        target_next_q = target_model.predict(next_states, verbose=0)
+
         for idx, data in enumerate(experiences):
-            new_target_max = data.step_reward + DISCOUNT_FACTOR * target_next_q[idx][actions_argmax[idx]]
-            targets[idx][data.action] = new_target_max
-    
-        Q_model.fit(states, targets, epochs=1, verbose=0)
-        if i % 10 == 0:  # Update target model periodically
-            target_model.set_weights(Q_model.get_weights())
+            if data.done_flag:
+                targets[idx][data.action] = data.step_reward
+            else:
+                targets[idx][data.action] = data.step_reward + DISCOUNT_FACTOR * target_next_q[idx][actions_argmax[idx]]
+
+        q_model.fit(states, targets, epochs=1, verbose=0)
+
+        if i % 10 == 0:
+            target_model.set_weights(q_model.get_weights())
             if i % 100 == 0:
-                memory_buffer = memory_buffer[int(len(memory_buffer) * 0.1):]
-        Q_model.save("src/upmodel_compact.keras")
-    return Q_model, target_model
+                memory_buffer = memory_buffer[int(len(memory_buffer) * 0.1) :]
 
-def train(Q_model):
-    target_model = clone_model(Q_model)
-    target_model.set_weights(Q_model.get_weights())
-    Q_model, target_model = episode(Q_model, target_model,exploration=0.6,size=1000,batch_size=30)
-    Q_model, target_model = episode(Q_model, target_model,exploration=0.6,size=1000,batch_size=30)
-    Q_model, target_model = episode(Q_model, target_model,exploration=0.6,size=800,batch_size=30)
-    Q_model, target_model = episode(Q_model, target_model,exploration=0.6,size=800,batch_size=30)
-   
-    return Q_model
+        if i % 25 == 0:
+            save_model(q_model)
 
-def try_model(Q_model):
-    flat_weights = flatten_weights(Q_model.trainable_variables)
-    for i in range(100):
-        agent = Agent(track, model=Q_model, weights=flat_weights, exploration=0.1, color="green")
-        run_simulation([agent])
+    return q_model, target_model
 
 
-def manual(Q_model):
-    # Initialize the agent
-    flat_weights = flatten_weights(Q_model.trainable_variables)
-    agent = Agent(track, model=Q_model, weights=flat_weights, exploration=0.0, color="green")
+def train(
+    q_model,
+    track,
+    rounds=4,
+    episode_size=800,
+    batch_size=30,
+    exploration=0.6,
+    render=False,
+):
+    target_model = clone_model(q_model)
+    target_model.set_weights(q_model.get_weights())
 
-    # Set up the simulation environment
+    for _ in range(rounds):
+        q_model, target_model = episode(
+            q_model,
+            target_model,
+            track=track,
+            exploration=exploration,
+            size=episode_size,
+            batch_size=batch_size,
+            render=render,
+        )
+
+    return q_model
+
+
+def try_model(q_model, track, runs=10):
+    flat_weights = flatten_weights(q_model.trainable_variables)
+    for _ in range(runs):
+        agent = Agent(track, model=q_model, weights=flat_weights, exploration=0.05, color="green")
+        run_simulation([agent], track=track, render=True)
+
+
+def manual(q_model, track):
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    pygame.display.set_caption("Racing Manual Drive")
+    flat_weights = flatten_weights(q_model.trainable_variables)
+    agent = Agent(track, model=q_model, weights=flat_weights, exploration=0.0, color="green")
+
     running = True
     clock = pygame.time.Clock()
-    start_ticks = pygame.time.get_ticks()
     timer_font = pygame.font.Font(None, 36)
     game_active = True
-    elapsed_seconds = 0
+    steps = 0
 
     while running:
         screen.fill((255, 255, 255))
-        if track:
-            screen.blit(track, (0, 0))
+        screen.blit(track, (0, 0))
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            # Check for S key press to save the model
 
         if game_active:
             agent.update2()
             agent.draw(screen)
 
-            elapsed_seconds = (pygame.time.get_ticks() - start_ticks) / 1000
+            steps += 1
+            elapsed_seconds = steps / 60.0
             timer_text = timer_font.render(f"Time: {elapsed_seconds:.2f} s", True, (0, 0, 0))
             screen.blit(timer_text, (20, 20))
-            if elapsed_seconds >= 120:
+            if steps >= 120 * 60:
                 agent.active = False
-                if agent.speed < 0.01:
-                    agent.active = False
+
             agent.check_wall()
             if agent.finish or not agent.active:
                 game_active = False
@@ -188,22 +229,75 @@ def manual(Q_model):
         pygame.display.flip()
         clock.tick(60)
 
-    experience_batch = []
-    for data in agent.data:
-        experience_batch.append(data)
-    return experience_batch
+    return list(agent.data)
+
+
+def load_or_create_model(path=MODEL_PATH):
+    if os.path.exists(path):
+        loaded_model = load_model(path)
+    else:
+        loaded_model = clone_model(default_model)
+        loaded_model.set_weights(default_model.get_weights())
+        save_model(loaded_model, path)
+
+    loaded_model.compile(optimizer="adam", loss="mean_squared_error", metrics=["accuracy"])
+    return loaded_model
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Reinforcement racing trainer")
+    parser.add_argument("--mode", choices=["train", "eval", "manual"], default="train")
+    parser.add_argument("--headless", action="store_true", help="Disable the graphical window (for CI/servers)")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--rounds", type=int, default=4)
+    parser.add_argument("--episode-size", type=int, default=800)
+    parser.add_argument("--batch-size", type=int, default=30)
+    parser.add_argument("--exploration", type=float, default=0.6)
+    parser.add_argument("--eval-runs", type=int, default=10)
+    return parser.parse_args()
+
 
 def main():
-    
-    Q_model = load_model("src/upmodel_compact.keras")
-    Q_model.compile(optimizer='adam', 
-              loss='mean_squared_error', 
-              metrics=['accuracy']) 
-    #try_model(model)
-    wmodel = train(Q_model)
-    wmodel.save("src/upmodel_compact.keras")  # Save using the native Keras format
-    
-    """while True:
-        manual(Q_model) # Updated to native Keras format"""
+    args = parse_args()
+
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    tf.random.set_seed(args.seed)
+
+    init_pygame(headless=args.headless)
+
+    try:
+        track = load_track()
+        q_model = load_or_create_model(MODEL_PATH)
+
+        if args.mode == "train":
+            trained_model = train(
+                q_model,
+                track=track,
+                rounds=args.rounds,
+                episode_size=args.episode_size,
+                batch_size=args.batch_size,
+                exploration=args.exploration,
+                render=not args.headless,
+            )
+            save_model(trained_model, MODEL_PATH)
+            return
+
+        if args.mode == "eval":
+            if args.headless:
+                raise ValueError("Evaluation mode requires display. Remove --headless.")
+            try_model(q_model, track=track, runs=args.eval_runs)
+            return
+
+        if args.mode == "manual":
+            if args.headless:
+                raise ValueError("Manual mode requires display. Remove --headless.")
+            manual(q_model, track=track)
+            return
+    finally:
+        pygame.quit()
+
+
 if __name__ == "__main__":
     main()
+

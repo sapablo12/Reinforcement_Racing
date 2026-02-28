@@ -1,0 +1,6 @@
+visualizing
+python src/main.py --mode train --rounds 4 --episode-size 800 --batch-size 30 --exploration 0.6
+
+
+HEADLESS
+python src/main.py --mode train --headless --rounds 4 --episode-size 800 --batch-size 30 --exploration 0.6

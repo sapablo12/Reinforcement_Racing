@@ -1,29 +1,25 @@
+import matplotlib.pyplot as plt
+import numpy as np
 import tensorflow as tf
 from dotenv import load_dotenv
-import numpy as np
+
 load_dotenv()
 
-print(tf.config.list_physical_devices('GPU'))
+print("Detected GPUs:", tf.config.list_physical_devices("GPU"))
 
-import matplotlib.pyplot as plt
+size = 100
+exploration = 0.7
+iterations = 100
 
-size = 100  # Define size
-exploration = 0.7  # Define exploration
-N = 100  # Number of iterations
-
-k = -1 * (1 / size) * np.log(0.05 / exploration)
 exp_values = []
-
-for i in range(N):
+for i in range(iterations):
     exp = exploration - (exploration - 0.05) * (i / size)
     exp_values.append(exp)
 
-# Plotting exp over N
-plt.plot(range(N), exp_values)
-plt.xlabel('N')
-plt.ylabel('exp')
-plt.title('exp over N')
+plt.plot(range(iterations), exp_values)
+plt.xlabel("Iteration")
+plt.ylabel("Exploration")
+plt.title("Exploration decay")
 plt.show()
-print(exp)
-a=[1,4,5,67,7,8,9]
-print
+
+print("Last exploration value:", exp_values[-1])
