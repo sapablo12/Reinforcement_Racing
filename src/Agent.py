@@ -1,299 +1,273 @@
-import pygame
+﻿from dataclasses import dataclass
+
 import numpy as np
+import pygame
 import tensorflow as tf
-from tensorflow.keras.models import Model, clone_model
+from tensorflow.keras.models import Model
 
-from base_model import assign_weights
+from config import (
+    ACTION_COUNT,
+    CENTER_SENSOR_INDEX,
+    MAX_SPEED,
+    SCREEN_HEIGHT,
+    SCREEN_WIDTH,
+    SENSOR_ANGLES,
+    SENSOR_COUNT,
+    SENSOR_LENGTH,
+)
 
-SENSOR_LENGTH = 250
-SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
+WALL_COLOR = (0, 0, 0)
+FINISH_COLOR = (255, 0, 0)
+CAR_COLORS = {
+    "blue": (0, 0, 255),
+    "green": (0, 255, 0),
+}
 
 
-class Info:
-    def __init__(self, state, output, act, step_reward, next_state, done_flag):
-        self.state = state
-        self.output = output
-        self.action = int(act)
-        self.step_reward = step_reward
-        self.done_flag = done_flag
-        self.next_state = next_state
+@dataclass
+class Experience:
+    state: np.ndarray
+    action: int
+    reward: float
+    next_state: np.ndarray
+    done: float
 
 
 class Agent:
-    def __init__(self, track, model: Model, weights, exploration, color="blue"):
+    def __init__(self, track, model: Model | None, exploration: float, color: str = "blue"):
         self.track = track
-        self.x_initial = 0
-        self.y_initial = 65
+        self.model = model
+        self.epsilon = exploration
+        self.color = color
+
+        self.x_initial = 0.0
+        self.y_initial = 65.0
         self.x = self.x_initial
         self.y = self.y_initial
-        self.displacements = []
-        self.frame = 0
-        self.frame_skip = 1
-        self.skip_counter = 0
-        self.last_action = None
-        self.last_output = None
         self.size = 20
-        self.angle = 0
-        self.speed = 1
-        self.sensors = tf.Variable(tf.zeros([1, 5]), dtype=tf.float32)
+        self.angle = 0.0
+        self.speed = 1.0
+
+        self.sensors = np.zeros(SENSOR_COUNT, dtype=np.float32)
         self.finish = False
         self.active = True
-        self.model: Model = clone_model(model)
-        self.epsilon = exploration
-        assign_weights(model=self.model, flat_weights=weights)
-        self.total_distance = 0
+        self.total_distance = 0.0
         self.total_time = 0
-        self.reward = 0
+        self.displacements = []
+        self.data: list[Experience] = []
+
         self.font = pygame.font.Font(None, 24)
-        self.data = []
-        self.color = color
 
     @staticmethod
     def _rgb(color):
-        return (color[0], color[1], color[2])
+        return color[:3]
 
     def draw(self, screen):
         half_size = self.size / 2
-        points = [
+        corners = [
             (self.x - half_size, self.y - half_size),
             (self.x + half_size, self.y - half_size),
             (self.x + half_size, self.y + half_size),
             (self.x - half_size, self.y + half_size),
         ]
-        rotated_points = [self.rotate_point(px, py, self.angle) for px, py in points]
-        rotated_points = [(int(px), int(py)) for px, py in rotated_points]
-        pygame.draw.polygon(screen, (0, 0, 255) if self.color == "blue" else (0, 255, 0), rotated_points)
+        rotated_corners = [(int(px), int(py)) for px, py in (self.rotate_point(x, y) for x, y in corners)]
 
-        self.draw_sensors(screen)
+        pygame.draw.polygon(screen, CAR_COLORS.get(self.color, CAR_COLORS["blue"]), rotated_corners)
+
         if self.color == "green":
+            self.draw_sensors(screen)
             self.display_sensor_values(screen)
             self.display_reward(screen)
 
-    def rotate_point(self, px, py, angle):
-        rad_angle = np.radians(angle)
-        sin_a = np.sin(rad_angle)
-        cos_a = np.cos(rad_angle)
-        cx, cy = self.x, self.y
-        x_shifted, y_shifted = px - cx, py - cy
-        x_new = x_shifted * cos_a - y_shifted * sin_a + cx
-        y_new = x_shifted * sin_a + y_shifted * cos_a + cy
-        return (x_new, y_new)
-
-    def check_wall(self):
-        if 0 <= self.x < SCREEN_WIDTH and 0 <= self.y < SCREEN_HEIGHT:
-            color = self._rgb(self.track.get_at((int(self.x), int(self.y))))
-            if color == (0, 0, 0):
-                self.active = False
+    def rotate_point(self, px, py):
+        radians = np.radians(self.angle)
+        sin_a = np.sin(radians)
+        cos_a = np.cos(radians)
+        x_shifted = px - self.x
+        y_shifted = py - self.y
+        return (
+            x_shifted * cos_a - y_shifted * sin_a + self.x,
+            x_shifted * sin_a + y_shifted * cos_a + self.y,
+        )
 
     def draw_sensors(self, screen):
-        sensor_angles = np.array([0, -45, 45, -90, 90])
-        sensor_colors = (0, 0, 255)
-
-        new_sensor_values = []
-        for angle_offset in sensor_angles:
+        for angle_offset, sensor_value in zip(SENSOR_ANGLES, self.sensors):
             angle = self.angle + angle_offset
-            distance = self.calculate_sensor_distance(angle, SENSOR_LENGTH)
-            new_sensor_values.append(distance / SENSOR_LENGTH)
-
-            if self.color == "green":
-                end_x = self.x + distance * np.cos(np.radians(angle))
-                end_y = self.y + distance * np.sin(np.radians(angle))
-                pygame.draw.line(screen, sensor_colors, (int(self.x), int(self.y)), (int(end_x), int(end_y)), 2)
-
-        self.sensors.assign(tf.convert_to_tensor([new_sensor_values], dtype=tf.float32))
-
-    def update_sensors(self):
-        sensor_angles = np.array([0, -45, 45, -90, 90])
-        new_sensor_values = []
-
-        for angle_offset in sensor_angles:
-            angle = self.angle + angle_offset
-            distance = self.calculate_sensor_distance(angle, SENSOR_LENGTH)
-            new_sensor_values.append(distance / SENSOR_LENGTH)
-
-        return tf.convert_to_tensor([new_sensor_values], dtype=tf.float32)
-
-    def calculate_sensor_distance(self, angle, max_length):
-        for distance in range(max_length):
-            sensor_x = self.x + distance * np.cos(np.radians(angle))
-            sensor_y = self.y + distance * np.sin(np.radians(angle))
-
-            if 0 <= sensor_x < SCREEN_WIDTH and 0 <= sensor_y < SCREEN_HEIGHT:
-                rgb_color = self._rgb(self.track.get_at((int(sensor_x), int(sensor_y))))
-                if rgb_color == (0, 0, 0):
-                    if distance == 0:
-                        self.active = False
-                    return distance
-                if rgb_color == (255, 0, 0):
-                    if distance == 0:
-                        self.finish = True
-                    return distance
-            else:
-                return distance
-        return max_length
+            distance = sensor_value * SENSOR_LENGTH
+            end_x = self.x + distance * np.cos(np.radians(angle))
+            end_y = self.y + distance * np.sin(np.radians(angle))
+            pygame.draw.line(screen, (0, 0, 255), (int(self.x), int(self.y)), (int(end_x), int(end_y)), 2)
 
     def update(self):
-        if self.active and self.model is not None:
-            self.sensors.assign(self.update_sensors())
-            self.frame += 1
-            state = tf.squeeze(tf.concat([self.sensors, tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
-
-            if self.skip_counter == 0:
-                output = self.model(tf.expand_dims(state, axis=0))
-                act = tf.argmax(output, axis=1).numpy()[0]
-                if np.random.rand() < self.epsilon:
-                    act = np.random.choice(4)
-                self.last_action = act
-                self.last_output = output
-                self.skip_counter = self.frame_skip
-            else:
-                act = self.last_action
-                self.skip_counter -= 1
-
-            actions = {
-                0: self.dec_angle,
-                1: self.inc_angle,
-                2: self.inc_speed,
-                3: self.dec_speed,
-            }
-            actions.get(act, lambda: None)()
-
-            self.x += self.speed * np.cos(np.radians(self.angle))
-            self.y += self.speed * np.sin(np.radians(self.angle))
-            self.displacements.append((self.x, self.y))
-            self.total_distance += self.speed
-
-            if self.x <= 0 or self.x >= SCREEN_WIDTH or self.y <= 0 or self.y >= SCREEN_HEIGHT:
-                self.active = False
-            else:
-                color = self._rgb(self.track.get_at((int(self.x), int(self.y))))
-                if color == (0, 0, 0):
-                    self.active = False
-                elif color == (255, 0, 0):
-                    self.finish = True
-
-            if self.skip_counter == 0:
-                step_reward = self.calculate_step_reward()
-                next_sensors = self.update_sensors().numpy().tolist()
-                next_state = tf.squeeze(
-                    tf.concat([tf.convert_to_tensor(next_sensors, dtype=tf.float32), tf.constant([[self.speed / 10.0]])], axis=1),
-                    axis=0,
-                )
-                done_flag = 1.0 if (self.finish or not self.active) else 0.0
-                self.data.append(Info(state, self.last_output, act, step_reward, next_state, done_flag))
-
-            self.x = np.clip(self.x, 0, SCREEN_WIDTH)
-            self.y = np.clip(self.y, 0, SCREEN_HEIGHT)
+        if not self.active or self.finish:
             return
 
-        new_displacement = (self.x, self.y)
-        self.displacements.append(new_displacement)
-        step_reward = self.calculate_step_reward()
-        done_flag = 1.0 if (self.finish or not self.active) else 0.0
-        output = tf.zeros([1, 4])
-        state = tf.squeeze(tf.concat([tf.zeros([1, 5], dtype=tf.float32), tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
-        self.data.append(Info(state, output, 0, step_reward, state, done_flag))
+        state = self.get_state()
+        action = self.choose_action(state)
 
-    def update2(self):
-        if self.active:
-            self.sensors.assign(self.update_sensors())
-            state = tf.squeeze(tf.concat([self.sensors, tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
-            keys = pygame.key.get_pressed()
-            if keys[pygame.K_a]:
-                self.dec_angle()
-            if keys[pygame.K_d]:
-                self.inc_angle()
-            if keys[pygame.K_w]:
-                self.inc_speed()
-            if keys[pygame.K_s]:
-                self.dec_speed()
+        self.apply_action(action)
+        self.move()
+        self.update_status()
 
-            self.x += self.speed * np.cos(np.radians(self.angle))
-            self.y += self.speed * np.sin(np.radians(self.angle))
-            self.total_distance += self.speed
-            self.total_time += 1
-            self.displacements.append((self.x, self.y))
+        next_state = self.get_state()
+        reward = self.calculate_step_reward()
+        done = 1.0 if self.finish or not self.active else 0.0
+        self.data.append(Experience(state, action, reward, next_state, done))
 
-            if self.x <= 0 or self.x >= SCREEN_WIDTH or self.y <= 0 or self.y >= SCREEN_HEIGHT:
-                self.active = False
-            else:
-                color = self._rgb(self.track.get_at((int(self.x), int(self.y))))
-                if color == (0, 0, 0):
-                    self.active = False
-                elif color == (255, 0, 0):
-                    self.finish = True
-
-            step_reward = self.calculate_step_reward()
-            next_sensors = self.update_sensors().numpy().tolist()
-            next_state = tf.squeeze(
-                tf.concat([tf.convert_to_tensor(next_sensors, dtype=tf.float32), tf.constant([[self.speed / 10.0]])], axis=1),
-                axis=0,
-            )
-            done_flag = 1.0 if self.finish else 0.0
-            self.data.append(Info(state, 0, 0, step_reward, next_state, done_flag))
-            self.x = np.clip(self.x, 0, SCREEN_WIDTH)
-            self.y = np.clip(self.y, 0, SCREEN_HEIGHT)
+    def update_manual(self):
+        if not self.active or self.finish:
             return
 
+        state = self.get_state()
+        action = self.apply_manual_controls()
+
+        self.move()
+        self.update_status()
+
+        next_state = self.get_state()
+        reward = self.calculate_step_reward()
+        done = 1.0 if self.finish or not self.active else 0.0
+        self.data.append(Experience(state, action, reward, next_state, done))
+
+    def get_state(self):
+        self.sensors = self.read_sensors()
+        speed_value = np.array([self.speed / MAX_SPEED], dtype=np.float32)
+        return np.concatenate([self.sensors, speed_value]).astype(np.float32)
+
+    def read_sensors(self):
+        distances = [
+            self.distance_to_obstacle(self.angle + angle_offset) / SENSOR_LENGTH
+            for angle_offset in SENSOR_ANGLES
+        ]
+        return np.array(distances, dtype=np.float32)
+
+    def distance_to_obstacle(self, angle):
+        radians = np.radians(angle)
+        cos_a = np.cos(radians)
+        sin_a = np.sin(radians)
+
+        for distance in range(SENSOR_LENGTH + 1):
+            sensor_x = self.x + distance * cos_a
+            sensor_y = self.y + distance * sin_a
+
+            if not self.inside_screen(sensor_x, sensor_y):
+                return distance
+
+            color = self._rgb(self.track.get_at((int(sensor_x), int(sensor_y))))
+            if color in (WALL_COLOR, FINISH_COLOR):
+                return distance
+
+        return SENSOR_LENGTH
+
+    def choose_action(self, state):
+        if self.model is None or np.random.rand() < self.epsilon:
+            return int(np.random.choice(ACTION_COUNT))
+
+        q_values = self.model(tf.expand_dims(state, axis=0), training=False)
+        return int(tf.argmax(q_values, axis=1).numpy()[0])
+
+    def apply_action(self, action):
+        actions = {
+            0: self.turn_left,
+            1: self.turn_right,
+            2: self.accelerate,
+            3: self.brake,
+        }
+        actions[action]()
+
+    def apply_manual_controls(self):
+        keys = pygame.key.get_pressed()
+        action = 0
+
+        if keys[pygame.K_a]:
+            self.turn_left()
+            action = 0
+        if keys[pygame.K_d]:
+            self.turn_right()
+            action = 1
+        if keys[pygame.K_w]:
+            self.accelerate()
+            action = 2
+        if keys[pygame.K_s]:
+            self.brake()
+            action = 3
+
+        return action
+
+    def move(self):
+        self.x += self.speed * np.cos(np.radians(self.angle))
+        self.y += self.speed * np.sin(np.radians(self.angle))
+        if not self.inside_screen(self.x, self.y):
+            self.active = False
+
+        self.x = float(np.clip(self.x, 0, SCREEN_WIDTH))
+        self.y = float(np.clip(self.y, 0, SCREEN_HEIGHT))
+
+        self.total_distance += self.speed
+        self.total_time += 1
         self.displacements.append((self.x, self.y))
-        step_reward = self.calculate_step_reward()
-        done_flag = 1.0 if self.finish else 0.0
-        if not self.finish:
-            step_reward = -100
-            done_flag = 0.0
-        output = tf.zeros([1, 4])
-        state = tf.squeeze(tf.concat([tf.zeros([1, 5], dtype=tf.float32), tf.constant([[self.speed / 10.0]])], axis=1), axis=0)
-        self.data.append(Info(state, output, 0, step_reward, state, done_flag))
+
+    def update_status(self):
+        if not self.active:
+            return
+
+        if not self.inside_screen(self.x, self.y):
+            self.active = False
+            return
+
+        color = self._rgb(self.track.get_at((int(self.x), int(self.y))))
+        if color == WALL_COLOR:
+            self.active = False
+        elif color == FINISH_COLOR:
+            self.finish = True
+
+    @staticmethod
+    def inside_screen(x, y):
+        return 0 <= x < SCREEN_WIDTH and 0 <= y < SCREEN_HEIGHT
 
     def calculate_step_reward(self):
-        v = self.speed
-        fs = -3 * (1 - self.sensors.numpy()[0][0])
-        avgf = -1.5 * (1 - tf.reduce_mean(self.sensors[0, 1:3]).numpy())
-        avgs = -1 * tf.reduce_mean(self.sensors[0, 2:]).numpy()
-        max_reward = 10
-        min_reward = -5.5
-
-        reward = v + fs + avgs + avgf
-        reward = 2 * (reward - min_reward) / (max_reward - min_reward) - 1
-
-        if self.active:
-            if not self.finish:
-                if self.speed < 0.8:
-                    reward = reward - 0.3
-                return reward
-            return 10
-
         if self.finish:
-            return 10
-        return -5
+            return 10.0
+        if not self.active:
+            return -5.0
 
-    def calculate_mean_speed(self):
-        if self.total_time > 0:
-            return self.total_distance / self.total_time
-        return 0
+        center_clearance = self.sensors[CENTER_SENSOR_INDEX]
+        front_slice = self.sensors[CENTER_SENSOR_INDEX - 1 : CENTER_SENSOR_INDEX + 2]
+        front_clearance = float(np.mean(front_slice))
+        overall_clearance = float(np.mean(self.sensors))
+
+        raw_reward = (
+            self.speed
+            - 3.0 * (1.0 - center_clearance)
+            - 1.5 * (1.0 - front_clearance)
+            - 1.0 * (1.0 - overall_clearance)
+        )
+        normalized_reward = 2.0 * (raw_reward + 5.5) / 15.5 - 1.0
+
+        if self.speed < 0.8:
+            normalized_reward -= 0.3
+
+        return float(normalized_reward)
 
     def display_sensor_values(self, screen):
-        sensor_values = self.sensors.numpy()[0]
-        for i, value in enumerate(sensor_values):
-            sensor_text = self.font.render(f"Sensor {i+1}: {value:.2f}", True, (0, 0, 0))
+        for i, value in enumerate(self.sensors):
+            sensor_text = self.font.render(f"Sensor {i + 1}: {value:.2f}", True, (0, 0, 0))
             screen.blit(sensor_text, (20, 50 + i * 20))
 
     def display_reward(self, screen):
-        reward = self.calculate_step_reward()
-        reward_text = self.font.render(f"Reward: {reward}", True, (0, 0, 0))
-        screen.blit(reward_text, (600, 550))
-
+        reward_text = self.font.render(f"Reward: {self.calculate_step_reward():.2f}", True, (0, 0, 0))
         speed_text = self.font.render(f"Speed: {self.speed:.2f}", True, (0, 0, 0))
+        screen.blit(reward_text, (600, 550))
         screen.blit(speed_text, (600, 570))
 
-    def dec_angle(self):
+    def turn_left(self):
         self.angle -= 2.5
 
-    def inc_angle(self):
+    def turn_right(self):
         self.angle += 2.5
 
-    def inc_speed(self):
-        self.speed = min(10, self.speed + 0.15)
+    def accelerate(self):
+        self.speed = min(MAX_SPEED, self.speed + 0.15)
 
-    def dec_speed(self):
-        self.speed = max(0, self.speed - 0.25)
+    def brake(self):
+        self.speed = max(0.0, self.speed - 0.25)

@@ -9,11 +9,10 @@ from tensorflow.keras.models import clone_model, load_model
 from tqdm import tqdm
 
 from Agent import Agent
-from base_model import flatten_weights, model as default_model
+from base_model import create_model
+from config import ACTION_COUNT, SCREEN_HEIGHT, SCREEN_WIDTH, STATE_SIZE
 
 DISCOUNT_FACTOR = 0.95
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
 MODEL_PATH = "models/upmodel_compact.keras"
 
 
@@ -95,23 +94,22 @@ def run_simulation(agents, track, render=True, max_steps=1800, fps=60):
 
 
 def get_experience(size, q_model, track, exploration, render=False):
-    run_size = min(30, size)
     all_experiences = []
-    num_simulations = -(-size // run_size)
+    remaining_agents = size
 
-    for _ in range(num_simulations):
-        flat_weights = flatten_weights(q_model.trainable_variables)
+    while remaining_agents > 0:
+        run_size = min(30, remaining_agents)
         current_agents = [
             Agent(
                 track,
                 model=q_model,
-                weights=flat_weights,
                 exploration=exploration,
                 color="green" if (render and i == 0) else "blue",
             )
             for i in range(run_size)
         ]
         all_experiences.extend(run_simulation(current_agents, track=track, render=render))
+        remaining_agents -= run_size
 
     return all_experiences
 
@@ -139,10 +137,10 @@ def episode(q_model, target_model, track, exploration=0.85, size=1000, batch_siz
         target_next_q = target_model.predict(next_states, verbose=0)
 
         for idx, data in enumerate(experiences):
-            if data.done_flag:
-                targets[idx][data.action] = data.step_reward
+            if data.done:
+                targets[idx][data.action] = data.reward
             else:
-                targets[idx][data.action] = data.step_reward + DISCOUNT_FACTOR * target_next_q[idx][actions_argmax[idx]]
+                targets[idx][data.action] = data.reward + DISCOUNT_FACTOR * target_next_q[idx][actions_argmax[idx]]
 
         q_model.fit(states, targets, epochs=1, verbose=0)
 
@@ -184,17 +182,15 @@ def train(
 
 
 def try_model(q_model, track, runs=10):
-    flat_weights = flatten_weights(q_model.trainable_variables)
     for _ in range(runs):
-        agent = Agent(track, model=q_model, weights=flat_weights, exploration=0.05, color="green")
+        agent = Agent(track, model=q_model, exploration=0.05, color="green")
         run_simulation([agent], track=track, render=True)
 
 
 def manual(q_model, track):
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Racing Manual Drive")
-    flat_weights = flatten_weights(q_model.trainable_variables)
-    agent = Agent(track, model=q_model, weights=flat_weights, exploration=0.0, color="green")
+    agent = Agent(track, model=q_model, exploration=0.0, color="green")
 
     running = True
     clock = pygame.time.Clock()
@@ -210,7 +206,7 @@ def manual(q_model, track):
                 running = False
 
         if game_active:
-            agent.update2()
+            agent.update_manual()
             agent.draw(screen)
 
             steps += 1
@@ -220,7 +216,6 @@ def manual(q_model, track):
             if steps >= 120 * 60:
                 agent.active = False
 
-            agent.check_wall()
             if agent.finish or not agent.active:
                 game_active = False
         else:
@@ -234,10 +229,17 @@ def manual(q_model, track):
 
 def load_or_create_model(path=MODEL_PATH):
     if os.path.exists(path):
-        loaded_model = load_model(path)
+        loaded_model = load_model(path, compile=False)
+        input_size = loaded_model.input_shape[-1]
+        output_size = loaded_model.output_shape[-1]
+        if input_size != STATE_SIZE or output_size != ACTION_COUNT:
+            print(
+                f"Ignoring incompatible saved model at {path}: "
+                f"expected input/output {STATE_SIZE}/{ACTION_COUNT}, got {input_size}/{output_size}."
+            )
+            loaded_model = create_model()
     else:
-        loaded_model = clone_model(default_model)
-        loaded_model.set_weights(default_model.get_weights())
+        loaded_model = create_model()
         save_model(loaded_model, path)
 
     loaded_model.compile(optimizer="adam", loss="mean_squared_error", metrics=["accuracy"])
