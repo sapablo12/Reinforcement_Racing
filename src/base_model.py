@@ -12,11 +12,8 @@ def create_model():
             Input(shape=(STATE_SIZE,)),
             Dense(32, activation="tanh", kernel_initializer=initializer),
             Dense(32, activation="tanh", kernel_initializer=initializer),
-            Dense(ACTION_COUNT, activation="softmax", kernel_initializer=initializer),
+            Dense(ACTION_COUNT, activation=None, kernel_initializer=initializer),
         ]
     )
-    model.compile(optimizer="adam", loss="categorical_crossentropy", metrics=["accuracy"])
+    model.compile(optimizer="adam", loss="mean_squared_error", metrics=["accuracy"])
     return model
-
-model=create_model()
-model.save("models/upmodel_compact.keras")

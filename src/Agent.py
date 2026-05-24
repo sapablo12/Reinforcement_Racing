@@ -237,7 +237,7 @@ class Agent:
         overall_clearance = float(np.mean(self.sensors))
 
         raw_reward = (
-            self.speed
+            1.2 * self.speed
             - 3.0 * (1.0 - center_clearance)
             - 1.5 * (1.0 - front_clearance)
             - 1.0 * (1.0 - overall_clearance)
@@ -245,7 +245,7 @@ class Agent:
         normalized_reward = 2.0 * (raw_reward + 5.5) / 15.5 - 1.0
 
         if self.speed < 0.8:
-            normalized_reward -= 0.3
+            normalized_reward -= 0.6
 
         return float(normalized_reward)
 

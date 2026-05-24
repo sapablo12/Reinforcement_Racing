@@ -3,16 +3,16 @@ name: remote-train
 on:
   workflow_dispatch:
     inputs:
-      headless:
-        description: "Run without display"
-        type: boolean
-        required: true
-        default: true
-      rounds:
-        description: "Training rounds"
+      chunks:
+        description: "Sequential chunks to train and upload, from 1 to 8"
         type: number
         required: true
-        default: 4
+        default: 6
+      rounds_per_chunk:
+        description: "Training rounds per chunk"
+        type: number
+        required: true
+        default: 1
       episode_size:
         description: "Steps per round"
         type: number
@@ -33,11 +33,20 @@ on:
         type: number
         required: true
         default: 42
+      artifact_name:
+        description: "Uploaded artifact name prefix"
+        type: string
+        required: true
+        default: "trained-model"
 
 jobs:
   train:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 360
+    env:
+      MODEL_PATH: src/models/upmodel_compact.keras
+      SDL_VIDEODRIVER: dummy
+      TF_CPP_MIN_LOG_LEVEL: "2"
 
     steps:
       - name: Checkout
@@ -54,31 +63,183 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Ensure initial model file exists
+      - name: Show training configuration
         run: |
-          python -c "import os,sys; sys.path.append('src'); from base_model import model; os.makedirs('models', exist_ok=True); model.save('models/upmodel_compact.keras') if not os.path.exists('models/upmodel_compact.keras') else None"
+          python --version
+          python - <<'PY'
+          import os
+          import sys
+          sys.path.insert(0, "src")
+          from config import SENSOR_COUNT, STATE_SIZE
+          print(f"Model path: {os.environ['MODEL_PATH']}")
+          print(f"Sensors: {SENSOR_COUNT}")
+          print(f"State size: {STATE_SIZE}")
+          PY
 
-      - name: Run training
+      - name: Train chunk 1
+        if: ${{ inputs.chunks >= 1 }}
         shell: bash
         run: |
-          HEADLESS_FLAG=""
-          if [ "${{ inputs.headless }}" = "true" ]; then
-            HEADLESS_FLAG="--headless"
-          fi
-
-          python src/main.py \
-            --mode train \
-            ${HEADLESS_FLAG} \
-            --rounds ${{ inputs.rounds }} \
+          python src/main.py --mode train --headless \
+            --rounds ${{ inputs.rounds_per_chunk }} \
             --episode-size ${{ inputs.episode_size }} \
             --batch-size ${{ inputs.batch_size }} \
             --exploration ${{ inputs.exploration }} \
-            --seed ${{ inputs.seed }}
+            --seed ${{ inputs.seed }} \
+            --model-path "${MODEL_PATH}"
 
-      - name: Upload trained model
+      - name: Upload checkpoint 1
+        if: ${{ inputs.chunks >= 1 }}
         uses: actions/upload-artifact@v4
         with:
-          name: trained-model-${{ github.run_id }}
-          path: models/upmodel_compact.keras
+          name: ${{ inputs.artifact_name }}-chunk-1-${{ github.run_id }}
+          path: ${{ env.MODEL_PATH }}
           if-no-files-found: error
+          retention-days: 30
 
+      - name: Train chunk 2
+        if: ${{ inputs.chunks >= 2 }}
+        shell: bash
+        run: |
+          python src/main.py --mode train --headless \
+            --rounds ${{ inputs.rounds_per_chunk }} \
+            --episode-size ${{ inputs.episode_size }} \
+            --batch-size ${{ inputs.batch_size }} \
+            --exploration ${{ inputs.exploration }} \
+            --seed ${{ inputs.seed }} \
+            --model-path "${MODEL_PATH}"
+
+      - name: Upload checkpoint 2
+        if: ${{ inputs.chunks >= 2 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}-chunk-2-${{ github.run_id }}
+          path: ${{ env.MODEL_PATH }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Train chunk 3
+        if: ${{ inputs.chunks >= 3 }}
+        shell: bash
+        run: |
+          python src/main.py --mode train --headless \
+            --rounds ${{ inputs.rounds_per_chunk }} \
+            --episode-size ${{ inputs.episode_size }} \
+            --batch-size ${{ inputs.batch_size }} \
+            --exploration ${{ inputs.exploration }} \
+            --seed ${{ inputs.seed }} \
+            --model-path "${MODEL_PATH}"
+
+      - name: Upload checkpoint 3
+        if: ${{ inputs.chunks >= 3 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}-chunk-3-${{ github.run_id }}
+          path: ${{ env.MODEL_PATH }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Train chunk 4
+        if: ${{ inputs.chunks >= 4 }}
+        shell: bash
+        run: |
+          python src/main.py --mode train --headless \
+            --rounds ${{ inputs.rounds_per_chunk }} \
+            --episode-size ${{ inputs.episode_size }} \
+            --batch-size ${{ inputs.batch_size }} \
+            --exploration ${{ inputs.exploration }} \
+            --seed ${{ inputs.seed }} \
+            --model-path "${MODEL_PATH}"
+
+      - name: Upload checkpoint 4
+        if: ${{ inputs.chunks >= 4 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}-chunk-4-${{ github.run_id }}
+          path: ${{ env.MODEL_PATH }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Train chunk 5
+        if: ${{ inputs.chunks >= 5 }}
+        shell: bash
+        run: |
+          python src/main.py --mode train --headless \
+            --rounds ${{ inputs.rounds_per_chunk }} \
+            --episode-size ${{ inputs.episode_size }} \
+            --batch-size ${{ inputs.batch_size }} \
+            --exploration ${{ inputs.exploration }} \
+            --seed ${{ inputs.seed }} \
+            --model-path "${MODEL_PATH}"
+
+      - name: Upload checkpoint 5
+        if: ${{ inputs.chunks >= 5 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}-chunk-5-${{ github.run_id }}
+          path: ${{ env.MODEL_PATH }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Train chunk 6
+        if: ${{ inputs.chunks >= 6 }}
+        shell: bash
+        run: |
+          python src/main.py --mode train --headless \
+            --rounds ${{ inputs.rounds_per_chunk }} \
+            --episode-size ${{ inputs.episode_size }} \
+            --batch-size ${{ inputs.batch_size }} \
+            --exploration ${{ inputs.exploration }} \
+            --seed ${{ inputs.seed }} \
+            --model-path "${MODEL_PATH}"
+
+      - name: Upload checkpoint 6
+        if: ${{ inputs.chunks >= 6 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}-chunk-6-${{ github.run_id }}
+          path: ${{ env.MODEL_PATH }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Train chunk 7
+        if: ${{ inputs.chunks >= 7 }}
+        shell: bash
+        run: |
+          python src/main.py --mode train --headless \
+            --rounds ${{ inputs.rounds_per_chunk }} \
+            --episode-size ${{ inputs.episode_size }} \
+            --batch-size ${{ inputs.batch_size }} \
+            --exploration ${{ inputs.exploration }} \
+            --seed ${{ inputs.seed }} \
+            --model-path "${MODEL_PATH}"
+
+      - name: Upload checkpoint 7
+        if: ${{ inputs.chunks >= 7 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}-chunk-7-${{ github.run_id }}
+          path: ${{ env.MODEL_PATH }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Train chunk 8
+        if: ${{ inputs.chunks >= 8 }}
+        shell: bash
+        run: |
+          python src/main.py --mode train --headless \
+            --rounds ${{ inputs.rounds_per_chunk }} \
+            --episode-size ${{ inputs.episode_size }} \
+            --batch-size ${{ inputs.batch_size }} \
+            --exploration ${{ inputs.exploration }} \
+            --seed ${{ inputs.seed }} \
+            --model-path "${MODEL_PATH}"
+
+      - name: Upload checkpoint 8
+        if: ${{ inputs.chunks >= 8 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}-chunk-8-${{ github.run_id }}
+          path: ${{ env.MODEL_PATH }}
+          if-no-files-found: error
+          retention-days: 30

@@ -13,7 +13,7 @@ from base_model import create_model
 from config import ACTION_COUNT, SCREEN_HEIGHT, SCREEN_WIDTH, STATE_SIZE
 
 DISCOUNT_FACTOR = 0.95
-MODEL_PATH = "models/upmodel_compact.keras"
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "upmodel_compact.keras")
 
 
 def init_pygame(headless: bool):
@@ -256,6 +256,7 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=30)
     parser.add_argument("--exploration", type=float, default=0.6)
     parser.add_argument("--eval-runs", type=int, default=10)
+    parser.add_argument("--model-path", default=MODEL_PATH)
     return parser.parse_args()
 
 
@@ -270,7 +271,7 @@ def main():
 
     try:
         track = load_track()
-        q_model = load_or_create_model(MODEL_PATH)
+        q_model = load_or_create_model(args.model_path)
 
         if args.mode == "train":
             trained_model = train(
@@ -282,7 +283,7 @@ def main():
                 exploration=args.exploration,
                 render=not args.headless,
             )
-            save_model(trained_model, MODEL_PATH)
+            save_model(trained_model, args.model_path)
             return
 
         if args.mode == "eval":
