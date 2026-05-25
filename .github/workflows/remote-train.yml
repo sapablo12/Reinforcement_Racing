@@ -17,12 +17,12 @@ on:
         description: "Steps per round"
         type: number
         required: true
-        default: 800
+        default: 400
       batch_size:
         description: "Agents per batch request"
         type: number
         required: true
-        default: 30
+        default: 40
       exploration:
         description: "Initial epsilon"
         type: string
