@@ -244,8 +244,8 @@ class Agent:
         )
         normalized_reward = 2.0 * (raw_reward + 5.5) / 15.5 - 1.0"""
 
-        reward = 0.1 * self.speed
-        if self.speed < 0.8:
+        reward = 0.3 * self.speed
+        if self.speed < 1.5:
             reward -= 0.2
 
         return float(reward)
