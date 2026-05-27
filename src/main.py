@@ -1,4 +1,4 @@
-import argparse
+﻿import argparse
 import os
 import random
 
@@ -12,7 +12,7 @@ from Agent import Agent
 from base_model import create_model
 from config import ACTION_COUNT, SCREEN_HEIGHT, SCREEN_WIDTH, STATE_SIZE
 
-DISCOUNT_FACTOR = 0.95
+DISCOUNT_FACTOR = 0.99
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "upmodel_compact.keras")
 
 
@@ -181,9 +181,9 @@ def train(
     return q_model
 
 
-def try_model(q_model, track, runs=10):
+def try_model(q_model, track, runs=100):
     for _ in range(runs):
-        agent = Agent(track, model=q_model, exploration=0.05, color="green")
+        agent = Agent(track, model=q_model, exploration=0.01, color="green")
         run_simulation([agent], track=track, render=True)
 
 
@@ -228,19 +228,32 @@ def manual(q_model, track):
 
 
 def load_or_create_model(path=MODEL_PATH):
-    if os.path.exists(path):
-        loaded_model = load_model(path, compile=False)
-        input_size = loaded_model.input_shape[-1]
-        output_size = loaded_model.output_shape[-1]
-        if input_size != STATE_SIZE or output_size != ACTION_COUNT:
-            print(
-                f"Ignoring incompatible saved model at {path}: "
-                f"expected input/output {STATE_SIZE}/{ACTION_COUNT}, got {input_size}/{output_size}."
-            )
-            loaded_model = create_model()
-    else:
+    if not os.path.exists(path):
         loaded_model = create_model()
         save_model(loaded_model, path)
+        return loaded_model
+
+    try:
+        loaded_model = load_model(path, compile=False)
+    except (TypeError, ValueError) as exc:
+        print(f"Could not deserialize saved model at {path}: {type(exc).__name__}: {str(exc).splitlines()[0]}")
+        print("Trying to load the saved weights into the current model architecture.")
+        loaded_model = create_model()
+        try:
+            loaded_model.load_weights(path)
+        except Exception as weight_exc:
+            print(f"Could not load weights from {path}: {weight_exc}")
+            print("Using a fresh model instead.")
+            loaded_model = create_model()
+
+    input_size = loaded_model.input_shape[-1]
+    output_size = loaded_model.output_shape[-1]
+    if input_size != STATE_SIZE or output_size != ACTION_COUNT:
+        print(
+            f"Ignoring incompatible saved model at {path}: "
+            f"expected input/output {STATE_SIZE}/{ACTION_COUNT}, got {input_size}/{output_size}."
+        )
+        loaded_model = create_model()
 
     loaded_model.compile(optimizer="adam", loss="mean_squared_error", metrics=["accuracy"])
     return loaded_model
@@ -289,7 +302,7 @@ def main():
         if args.mode == "eval":
             if args.headless:
                 raise ValueError("Evaluation mode requires display. Remove --headless.")
-            try_model(q_model, track=track, runs=args.eval_runs)
+            try_model(q_model, track=track, runs=100)
             return
 
         if args.mode == "manual":

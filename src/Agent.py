@@ -227,11 +227,11 @@ class Agent:
 
     def calculate_step_reward(self):
         if self.finish:
-            return 10.0
+            return 20.0
         if not self.active:
-            return -5.0
+            return -20.0
 
-        center_clearance = self.sensors[CENTER_SENSOR_INDEX]
+        """center_clearance = self.sensors[CENTER_SENSOR_INDEX]
         front_slice = self.sensors[CENTER_SENSOR_INDEX - 1 : CENTER_SENSOR_INDEX + 2]
         front_clearance = float(np.mean(front_slice))
         overall_clearance = float(np.mean(self.sensors))
@@ -242,12 +242,13 @@ class Agent:
             - 1.5 * (1.0 - front_clearance)
             - 1.0 * (1.0 - overall_clearance)
         )
-        normalized_reward = 2.0 * (raw_reward + 5.5) / 15.5 - 1.0
+        normalized_reward = 2.0 * (raw_reward + 5.5) / 15.5 - 1.0"""
 
+        reward = 0.1 * self.speed
         if self.speed < 0.8:
-            normalized_reward -= 0.6
+            reward -= 0.2
 
-        return float(normalized_reward)
+        return float(reward)
 
     def display_sensor_values(self, screen):
         for i, value in enumerate(self.sensors):
