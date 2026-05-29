@@ -17,3 +17,6 @@ def create_model():
     )
     model.compile(optimizer="adam", loss="mean_squared_error", metrics=["accuracy"])
     return model
+
+"""model=create_model()
+model.save("upmodel_compact.keras")"""
