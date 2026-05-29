@@ -118,8 +118,8 @@ def episode(q_model, target_model, track, exploration=0.85, size=1000, batch_siz
     memory_buffer = []
     min_replay_sample = 256
     replay_sample = 1200
-
-    for i in tqdm(range(1, size + 1), desc=f"Exploration={exploration:.2f}"):
+    exp=exploration
+    for i in tqdm(range(1, size + 1), desc=f"Exploration={exp:.2f}"):
         exp = exploration - (exploration - 0.05) * (i / size)
         memory_buffer.extend(get_experience(size=batch_size, q_model=q_model, track=track, exploration=exp, render=render))
 

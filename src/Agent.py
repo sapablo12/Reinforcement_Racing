@@ -50,6 +50,7 @@ class Agent:
 
         self.sensors = np.zeros(SENSOR_COUNT, dtype=np.float32)
         self.finish = False
+        self.wall=False
         self.active = True
         self.total_distance = 0.0
         self.total_time = 0
@@ -198,6 +199,7 @@ class Agent:
         self.x += self.speed * np.cos(np.radians(self.angle))
         self.y += self.speed * np.sin(np.radians(self.angle))
         if not self.inside_screen(self.x, self.y):
+            self.wall=True
             self.active = False
 
         self.x = float(np.clip(self.x, 0, SCREEN_WIDTH))
@@ -217,6 +219,7 @@ class Agent:
 
         color = self._rgb(self.track.get_at((int(self.x), int(self.y))))
         if color == WALL_COLOR:
+            self.wall=True
             self.active = False
         elif color == FINISH_COLOR:
             self.finish = True
@@ -228,8 +231,11 @@ class Agent:
     def calculate_step_reward(self):
         if self.finish:
             return 20.0
-        if not self.active:
+        if self.wall:
             return -20.0
+        if not self.active:
+            return 0.0
+        
 
         """center_clearance = self.sensors[CENTER_SENSOR_INDEX]
         front_slice = self.sensors[CENTER_SENSOR_INDEX - 1 : CENTER_SENSOR_INDEX + 2]
