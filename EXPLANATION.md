@@ -1,95 +1,78 @@
-# Reinforcement Racing Explanation
+# Technical Explanation
 
-## 1. How the agent interacts with the environment
+This file is a short walkthrough of the core learning loop. The complete project documentation is in `README.md`.
 
-Each simulation frame follows this loop:
+## Agent Step
 
-1. The agent reads its current state.
-   - It casts 9 front-facing sensors from left to right at angles `-80, -60, -40, -20, 0, 20, 40, 60, 80` degrees relative to the car direction.
-   - Each sensor returns a normalized distance from `0.0` to `1.0`, where `1.0` means no wall or finish line was found within the sensor range.
-   - The current speed is normalized by the maximum speed and appended to the sensors.
-   - The final state therefore has 10 values: 9 sensors plus speed.
+Each active agent step follows this sequence:
 
-2. The agent chooses an action.
-   - With probability `epsilon`, it explores by choosing a random action.
-   - Otherwise, it sends the state into the Q model.
-   - The model returns 4 Q values, one per action.
-   - The agent chooses the action with the highest Q value.
+1. Read the current state.
+   - Cast 9 front-facing sensors.
+   - Normalize each sensor distance to `0.0` through `1.0`.
+   - Append normalized speed.
+   - The current state size is 10.
 
-3. The action changes the car controls.
-   - Action `0`: turn left.
-   - Action `1`: turn right.
-   - Action `2`: accelerate.
-   - Action `3`: brake.
+2. Choose an action.
+   - With probability `epsilon`, choose a random action.
+   - Otherwise, run the state through the Q-network and choose the action with the highest Q-value.
 
-4. The car moves.
-   - Its position changes according to its speed and angle.
-   - The position is clipped to the screen bounds.
-   - Distance and time counters are updated.
+3. Apply the action.
+   - `0`: turn left.
+   - `1`: turn right.
+   - `2`: accelerate.
+   - `3`: brake.
 
-5. The environment checks the result.
-   - If the car reaches black pixels, it has hit a wall and becomes inactive.
-   - If the car reaches red pixels, it has finished the track.
-   - Otherwise, it remains active.
+4. Move the car.
+   - Position changes using speed and heading.
+   - Leaving the screen marks `wall=True` and `active=False`.
 
-6. The agent reads the next state.
-   - The 9 sensors are read again after movement.
-   - The new normalized speed is appended again.
+5. Check track pixels.
+   - Black pixels mark wall collision.
+   - Red pixels mark finish.
+   - The red finish line is transparent to sensors but still detected by the car position.
 
-7. The reward is calculated.
-   - Finishing gives a large positive reward.
-   - Hitting a wall gives a negative reward.
-   - While driving, reward increases with speed and with free space in front of the car.
-   - Driving very slowly receives a small penalty.
+6. Read the next state.
 
-8. The transition is stored.
-   - The replay item is:
-     `state, action, reward, next_state, done`
-   - `done` is `1.0` when the car finished or crashed, otherwise `0.0`.
+7. Calculate reward.
+   - Finish gives a strong positive reward.
+   - Wall collision gives a strong negative reward.
+   - Normal driving rewards speed and lightly penalizes very low speed.
 
-## 2. How the training process works
+8. Store an experience item:
 
-Training uses Deep Q Learning with a target model:
+```text
+state, action, reward, next_state, done
+```
 
-1. `main.py` loads the track image and creates or loads the Q model.
-   - The model input size must be 10.
-   - If an older saved model has the old 6-input shape, it is ignored and a fresh model is created.
+`done` is true when the agent finished or stopped being active.
 
-2. A target model is cloned from the Q model.
-   - The Q model is trained every replay step.
-   - The target model is updated less often, which makes Q targets more stable.
+## Training Loop
 
-3. For each training round, an episode loop runs many simulation batches.
-   - Each batch creates several agents with the current Q model.
-   - Each agent drives until it crashes, finishes, or reaches the step limit.
-   - All generated transitions are added to a replay memory buffer.
+Training uses DQN-style replay with a target network:
 
-4. Exploration decays during the episode.
-   - Early in training, the agent takes more random actions.
-   - Later in training, it relies more on the Q model.
-   - The minimum exploration value used by the schedule is `0.05`.
+1. Load or create the Q-network.
+2. Clone it into a target network.
+3. Simulate agents to collect experiences.
+4. Add experiences to replay memory.
+5. Once enough data exists, sample random experiences.
+6. Predict current Q-values for sampled states.
+7. Predict next actions with the Q-network.
+8. Evaluate those next actions with the target network.
+9. Replace only the Q-value for the action that was actually taken.
+10. Fit the Q-network on the updated targets.
+11. Periodically copy Q-network weights into the target network.
+12. Periodically save the model.
 
-5. Once the replay memory has enough data, a random sample is selected.
-   - Random replay avoids training only on the most recent driving sequence.
-   - The code currently waits for at least 256 transitions.
-   - It trains from up to 1200 sampled transitions.
+For non-terminal transitions:
 
-6. The model builds Q-learning targets.
-   - It predicts current Q values for each sampled state.
-   - It predicts next-state actions with the Q model.
-   - It evaluates those next-state actions with the target model.
-   - This is the Double DQN update pattern.
+```text
+target = reward + discount_factor * future_value
+```
 
-7. Each sampled action target is replaced.
-   - If the transition ended the run, the target is just the immediate reward.
-   - Otherwise:
-     `target = reward + discount_factor * target_model_value_for_best_next_action`
-   - The discount factor is `0.95`.
+For terminal transitions:
 
-8. The Q model trains for one epoch on the sampled states and updated targets.
+```text
+target = reward
+```
 
-9. Every 10 replay updates, the target model copies the Q model weights.
-
-10. Every 25 replay updates, the Q model is saved.
-
-11. After all rounds finish, the trained Q model is saved to `models/upmodel_compact.keras`.
+The current discount factor is `0.99`, so future finish/crash rewards influence earlier decisions more strongly than with a lower discount value.

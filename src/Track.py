@@ -1,131 +1,196 @@
-import tkinter as tk
-from tkinter import filedialog
-from PIL import Image, ImageDraw, ImageTk
 import os
+import shutil
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+
+from PIL import Image, ImageDraw, ImageTk
+
+
+CANVAS_WIDTH = 800
+CANVAS_HEIGHT = 600
+TRACKS_DIR = os.path.join(os.path.dirname(__file__), "tracks")
+CURRENT_TRACK_DIR = os.path.join(os.path.dirname(__file__), "current_track")
+CURRENT_TRACK_PATH = os.path.join(CURRENT_TRACK_DIR, "track.png")
+
+COLORS = {
+    "Black": "black",
+    "Red": "red",
+    "Eraser": "white",
+}
+
 
 class TrackPainter:
     def __init__(self, root):
         self.root = root
         self.root.title("Track Painter")
-        
-        # Set up the canvas
-        self.canvas_width = 800
-        self.canvas_height = 600
-        self.canvas = tk.Canvas(root, width=self.canvas_width, height=self.canvas_height, bg='white')
-        self.canvas.pack()
-        
-        # Variables to keep track of drawing
+        self.root.configure(bg="#f6f7f9")
+
+        os.makedirs(TRACKS_DIR, exist_ok=True)
+        os.makedirs(CURRENT_TRACK_DIR, exist_ok=True)
+
         self.drawing = False
-        self.last_x, self.last_y = None, None
-        self.current_color = 'black'
-        self.green_spots = []  # List to keep track of green spots
+        self.last_x = None
+        self.last_y = None
+        self.track_photo = None
 
-        # Bind mouse events to canvas
-        self.canvas.bind('<Button-1>', self.start_drawing)
-        self.canvas.bind('<B1-Motion>', self.draw)
-        self.canvas.bind('<ButtonRelease-1>', self.stop_drawing)
+        self.color_name = tk.StringVar(value="Black")
+        self.brush_size = tk.IntVar(value=8)
+        self.status_text = tk.StringVar(value="")
 
-        # Frame to hold buttons in a neat table
-        self.button_frame = tk.Frame(root, relief=tk.RIDGE, borderwidth=2, bg='#f0f0f0')
-        self.button_frame.pack(pady=10, padx=10)
-
-        # Add buttons in a grid layout
-        self.black_button = tk.Button(self.button_frame, text="Switch to Black", command=self.switch_to_black, width=20)
-        self.black_button.grid(row=0, column=0, padx=5, pady=5)
-        
-        self.red_button = tk.Button(self.button_frame, text="Switch to Red", command=self.switch_to_red, width=20)
-        self.red_button.grid(row=0, column=1, padx=5, pady=5)
-        
-        self.green_button = tk.Button(self.button_frame, text="Switch to Green", command=self.switch_to_green, width=20)
-        self.green_button.grid(row=0, column=2, padx=5, pady=5)
-        
-        self.fill_button = tk.Button(self.button_frame, text="Fill Area", command=self.fill_area, width=20)
-        self.fill_button.grid(row=1, column=2, padx=5, pady=5)
-        
-        self.save_current_button = tk.Button(self.button_frame, text="Save Track to Current Folder", command=self.save_track_current_folder, width=20)
-        self.save_current_button.grid(row=1, column=0, padx=5, pady=5)
-        
-        self.view_current_button = tk.Button(self.button_frame, text="View Current Track", command=self.view_current_track, width=20)
-        self.view_current_button.grid(row=1, column=1, padx=5, pady=5)
-        
-        # Create an image to draw on (for saving purposes)
-        self.image = Image.new("RGB", (self.canvas_width, self.canvas_height), "white")
+        self.image = Image.new("RGB", (CANVAS_WIDTH, CANVAS_HEIGHT), "white")
         self.draw_image = ImageDraw.Draw(self.image)
+
+        self.build_ui()
+        self.bind_canvas_events()
+        self.view_current_track(show_missing_message=False)
+
+    def build_ui(self):
+        main_frame = ttk.Frame(self.root, padding=16)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        toolbar = ttk.Frame(main_frame)
+        toolbar.pack(fill=tk.X, pady=(0, 12))
+
+        ttk.Label(toolbar, text="Brush").grid(row=0, column=0, sticky="w", padx=(0, 8))
+        color_menu = ttk.OptionMenu(toolbar, self.color_name, self.color_name.get(), *COLORS.keys())
+        color_menu.grid(row=0, column=1, sticky="w", padx=(0, 18))
+
+        ttk.Label(toolbar, text="Width").grid(row=0, column=2, sticky="w", padx=(0, 8))
+        size_slider = ttk.Scale(
+            toolbar,
+            from_=2,
+            to=40,
+            orient=tk.HORIZONTAL,
+            variable=self.brush_size,
+            command=self.update_brush_label,
+            length=170,
+        )
+        size_slider.grid(row=0, column=3, sticky="w")
+
+        self.brush_label = ttk.Label(toolbar, text=str(self.brush_size.get()), width=3)
+        self.brush_label.grid(row=0, column=4, sticky="w", padx=(8, 18))
+
+        ttk.Button(toolbar, text="Save Track", command=self.save_track).grid(row=0, column=5, padx=(0, 8))
+        ttk.Button(toolbar, text="Choose Current Track", command=self.choose_current_track).grid(row=0, column=6, padx=(0, 8))
+        ttk.Button(toolbar, text="View Current Track", command=self.view_current_track).grid(row=0, column=7)
+
+        toolbar.columnconfigure(8, weight=1)
+
+        canvas_frame = ttk.Frame(main_frame, borderwidth=1, relief=tk.SOLID)
+        canvas_frame.pack()
+
+        self.canvas = tk.Canvas(
+            canvas_frame,
+            width=CANVAS_WIDTH,
+            height=CANVAS_HEIGHT,
+            bg="white",
+            highlightthickness=0,
+        )
+        self.canvas.pack()
+
+        status = ttk.Label(main_frame, textvariable=self.status_text, anchor="w")
+        status.pack(fill=tk.X, pady=(10, 0))
+
+    def bind_canvas_events(self):
+        self.canvas.bind("<Button-1>", self.start_drawing)
+        self.canvas.bind("<B1-Motion>", self.draw)
+        self.canvas.bind("<ButtonRelease-1>", self.stop_drawing)
+
+    def update_brush_label(self, _value=None):
+        self.brush_label.configure(text=str(int(float(self.brush_size.get()))))
+
+    def current_color(self):
+        return COLORS[self.color_name.get()]
+
+    def current_brush_size(self):
+        return int(float(self.brush_size.get()))
 
     def start_drawing(self, event):
         self.drawing = True
-        self.last_x, self.last_y = event.x, event.y
+        self.last_x = event.x
+        self.last_y = event.y
+        self.draw(event)
 
     def draw(self, event):
-        if self.drawing:
-            x, y = event.x, event.y
-            # Draw on the canvas
-            if self.current_color == 'green':
-                size = 10  # Bigger size for green spots
-                self.green_spots.append((x, y, size))  # Add green spot to the list
-            else:
-                size = 3
-            self.canvas.create_line((self.last_x, self.last_y, x, y), fill=self.current_color, width=6)
-            self.canvas.create_oval(x-size, y-size, x+size, y+size, fill=self.current_color, outline=self.current_color)
-            # Draw on the image
-            self.draw_image.line((self.last_x, self.last_y, x, y), fill=self.current_color, width=6)
-            self.draw_image.ellipse([x-size, y-size, x+size, y+size], fill=self.current_color, outline=self.current_color)
-            self.last_x, self.last_y = x, y
+        if not self.drawing:
+            return
 
-    def stop_drawing(self, event):
+        x = self.clamp(event.x, 0, CANVAS_WIDTH - 1)
+        y = self.clamp(event.y, 0, CANVAS_HEIGHT - 1)
+        color = self.current_color()
+        width = self.current_brush_size()
+        radius = width / 2
+
+        self.canvas.create_line(self.last_x, self.last_y, x, y, fill=color, width=width, capstyle=tk.ROUND, joinstyle=tk.ROUND)
+        self.canvas.create_oval(x - radius, y - radius, x + radius, y + radius, fill=color, outline=color)
+
+        self.draw_image.line((self.last_x, self.last_y, x, y), fill=color, width=width)
+        self.draw_image.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color, outline=color)
+
+        self.last_x = x
+        self.last_y = y
+
+    def stop_drawing(self, _event):
         self.drawing = False
-        self.last_x, self.last_y = None, None
+        self.last_x = None
+        self.last_y = None
 
-    def switch_to_black(self):
-        self.current_color = 'black'
+    def save_track(self):
+        path = filedialog.asksaveasfilename(
+            title="Save Track",
+            initialdir=TRACKS_DIR,
+            defaultextension=".png",
+            filetypes=[("PNG image", "*.png")],
+        )
+        if not path:
+            return
 
-    def switch_to_red(self):
-        self.current_color = 'red'
-    
-    def switch_to_green(self):
-        self.current_color = 'green'
+        self.image.save(path)
+        self.status_text.set(f"Saved track: {path}")
 
-    def fill_area(self):
-        # Fill the entire canvas with the current color
-        if self.current_color == 'green':
-            fill_color = '#00FF00'  # Hex code for (0, 255, 0)
-        else:
-            fill_color = self.current_color
-        self.canvas.create_rectangle(0, 0, self.canvas_width, self.canvas_height, fill=fill_color, outline=fill_color)
-        self.draw_image.rectangle([0, 0, self.canvas_width, self.canvas_height], fill=fill_color, outline=fill_color)
+    def choose_current_track(self):
+        path = filedialog.askopenfilename(
+            title="Choose Current Track",
+            initialdir=TRACKS_DIR,
+            filetypes=[("PNG image", "*.png")],
+        )
+        if not path:
+            return
 
-    def save_track_current_folder(self):
-        # Define the path to the 'current_track' folder
-        folder_path = os.path.join(os.path.dirname(__file__), 'current_track')
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-        
-        # Define the file path for the track image
-        file_path = os.path.join(folder_path, 'track.png')
-        
-        # If a file already exists, it will be replaced
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        
-        # Save the current track
-        self.image.save(file_path)
-        print(f"Track saved to {file_path}")
+        shutil.copyfile(path, CURRENT_TRACK_PATH)
+        self.view_current_track(show_missing_message=False)
+        self.status_text.set(f"Current track set to: {path}")
 
-    def view_current_track(self):
-        # Define the path to the 'current_track' folder
-        folder_path = os.path.join(os.path.dirname(__file__), 'current_track')
-        file_path = os.path.join(folder_path, 'track.png')
-        
-        # Check if the track file exists
-        if os.path.exists(file_path):
-            # Open the image and display it on the canvas
-            track_image = Image.open(file_path)
-            self.image = track_image.copy()
-            self.draw_image = ImageDraw.Draw(self.image)
-            self.track_photo = ImageTk.PhotoImage(track_image)
-            self.canvas.create_image(0, 0, anchor=tk.NW, image=self.track_photo)
-        else:
-            print("No track found in the current_track folder.")
+    def view_current_track(self, show_missing_message=True):
+        if not os.path.exists(CURRENT_TRACK_PATH):
+            self.clear_canvas()
+            message = f"No current track found at {CURRENT_TRACK_PATH}"
+            self.status_text.set(message)
+            if show_missing_message:
+                messagebox.showinfo("Current Track", message)
+            return
+
+        with Image.open(CURRENT_TRACK_PATH) as track_image:
+            self.image = track_image.convert("RGB").resize((CANVAS_WIDTH, CANVAS_HEIGHT))
+
+        self.draw_image = ImageDraw.Draw(self.image)
+        self.redraw_canvas_image()
+        self.status_text.set(f"Viewing current track: {CURRENT_TRACK_PATH}")
+
+    def clear_canvas(self):
+        self.image = Image.new("RGB", (CANVAS_WIDTH, CANVAS_HEIGHT), "white")
+        self.draw_image = ImageDraw.Draw(self.image)
+        self.redraw_canvas_image()
+
+    def redraw_canvas_image(self):
+        self.canvas.delete("all")
+        self.track_photo = ImageTk.PhotoImage(self.image)
+        self.canvas.create_image(0, 0, anchor=tk.NW, image=self.track_photo)
+
+    @staticmethod
+    def clamp(value, minimum, maximum):
+        return max(minimum, min(value, maximum))
+
 
 if __name__ == "__main__":
     root = tk.Tk()

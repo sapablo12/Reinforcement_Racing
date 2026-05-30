@@ -155,7 +155,7 @@ class Agent:
                 return distance
 
             color = self._rgb(self.track.get_at((int(sensor_x), int(sensor_y))))
-            if color in (WALL_COLOR, FINISH_COLOR):
+            if color == WALL_COLOR:
                 return distance
 
         return SENSOR_LENGTH
