@@ -210,6 +210,7 @@ class Agent:
         self.displacements.append((self.x, self.y))
 
     def update_status(self):
+         #print(self.calculate_step_reward())
         if not self.active:
             return
 
@@ -237,19 +238,22 @@ class Agent:
             return 0.0
         
 
-        """center_clearance = self.sensors[CENTER_SENSOR_INDEX]
+        center_clearance = self.sensors[CENTER_SENSOR_INDEX]
+        """
         front_slice = self.sensors[CENTER_SENSOR_INDEX - 1 : CENTER_SENSOR_INDEX + 2]
         front_clearance = float(np.mean(front_slice))
         overall_clearance = float(np.mean(self.sensors))
-
+        
         raw_reward = (
             1.2 * self.speed
             - 3.0 * (1.0 - center_clearance)
             - 1.5 * (1.0 - front_clearance)
             - 1.0 * (1.0 - overall_clearance)
         )
-        normalized_reward = 2.0 * (raw_reward + 5.5) / 15.5 - 1.0"""
-
+        normalized_reward = 2.0 * (raw_reward + 5.5) / 15.5 - 1.0
+        """
+        if(center_clearance < 0.2 and self.speed > 5):
+            return -5
         reward = 0.3 * self.speed
         if self.speed < 1.5:
             reward -= 0.2
