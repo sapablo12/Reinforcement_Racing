@@ -7,6 +7,8 @@ from tensorflow.keras.models import Model
 
 from config import (
     ACTION_COUNT,
+    AGENT_START_X,
+    AGENT_START_Y,
     CENTER_SENSOR_INDEX,
     MAX_SPEED,
     SCREEN_HEIGHT,
@@ -40,8 +42,8 @@ class Agent:
         self.epsilon = exploration
         self.color = color
 
-        self.x_initial = 0.0
-        self.y_initial = 65.0
+        self.x_initial = AGENT_START_X
+        self.y_initial = AGENT_START_Y
         self.x = self.x_initial
         self.y = self.y_initial
         self.size = 20

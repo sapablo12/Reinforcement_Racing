@@ -5,12 +5,15 @@ from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image, ImageDraw, ImageTk
 
+from config import AGENT_START_X, AGENT_START_Y
+
 
 CANVAS_WIDTH = 800
 CANVAS_HEIGHT = 600
 TRACKS_DIR = os.path.join(os.path.dirname(__file__), "tracks")
 CURRENT_TRACK_DIR = os.path.join(os.path.dirname(__file__), "current_track")
 CURRENT_TRACK_PATH = os.path.join(CURRENT_TRACK_DIR, "track.png")
+START_MARKER_RADIUS = 7
 
 COLORS = {
     "Black": "black",
@@ -72,9 +75,10 @@ class TrackPainter:
 
         ttk.Button(toolbar, text="Save Track", command=self.save_track).grid(row=0, column=5, padx=(0, 8))
         ttk.Button(toolbar, text="Choose Current Track", command=self.choose_current_track).grid(row=0, column=6, padx=(0, 8))
-        ttk.Button(toolbar, text="View Current Track", command=self.view_current_track).grid(row=0, column=7)
+        ttk.Button(toolbar, text="View Current Track", command=self.view_current_track).grid(row=0, column=7, padx=(0, 8))
+        ttk.Button(toolbar, text="Clear All", command=self.clear_canvas).grid(row=0, column=8)
 
-        toolbar.columnconfigure(8, weight=1)
+        toolbar.columnconfigure(9, weight=1)
 
         canvas_frame = ttk.Frame(main_frame, borderwidth=1, relief=tk.SOLID)
         canvas_frame.pack()
@@ -123,6 +127,7 @@ class TrackPainter:
 
         self.canvas.create_line(self.last_x, self.last_y, x, y, fill=color, width=width, capstyle=tk.ROUND, joinstyle=tk.ROUND)
         self.canvas.create_oval(x - radius, y - radius, x + radius, y + radius, fill=color, outline=color)
+        self.draw_start_marker()
 
         self.draw_image.line((self.last_x, self.last_y, x, y), fill=color, width=width)
         self.draw_image.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color, outline=color)
@@ -181,11 +186,38 @@ class TrackPainter:
         self.image = Image.new("RGB", (CANVAS_WIDTH, CANVAS_HEIGHT), "white")
         self.draw_image = ImageDraw.Draw(self.image)
         self.redraw_canvas_image()
+        self.status_text.set("Cleared canvas")
 
     def redraw_canvas_image(self):
         self.canvas.delete("all")
         self.track_photo = ImageTk.PhotoImage(self.image)
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.track_photo)
+        self.draw_start_marker()
+
+    def draw_start_marker(self):
+        self.canvas.delete("start_marker")
+        x = int(AGENT_START_X)
+        y = int(AGENT_START_Y)
+        r = START_MARKER_RADIUS
+        self.canvas.create_oval(
+            x - r,
+            y - r,
+            x + r,
+            y + r,
+            fill="#1f6fff",
+            outline="white",
+            width=2,
+            tags="start_marker",
+        )
+        self.canvas.create_text(
+            x + 12,
+            y,
+            text="Start",
+            fill="#1f6fff",
+            anchor=tk.W,
+            font=("Segoe UI", 10, "bold"),
+            tags="start_marker",
+        )
 
     @staticmethod
     def clamp(value, minimum, maximum):
